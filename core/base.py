@@ -6,15 +6,13 @@ from time import time
 class BlockHeader(object):
 	__slots__ = ['previous_hash', 'merkle_root', 'timestamp', 'target_threshold', 'nonce', 'size', 'block']
 	
-	def __init__(self, prev_hash, threshold, block):
-		self.previous_hash = prev_hash
+	def __init__(self, prev_block, threshold, block):
+		self.previous_hash = prev_block.hash
 		self.timestamp = time()
 		self.target_threshold = threshold
 		self.block = block
+		self.height = prev_block.header.height + 1
 	
-	def __repr__(self):
-		return "<%s> Header of Block %s" %(self.timestamp, self.block)
-
 	def getNonce(self):
 		block = self.block
 		pass
@@ -45,18 +43,43 @@ class BlockHeader(object):
 			raise TypeError("Immutable data")
 
 	def save(self, transactions, block):
-		self.merkle_root = getMerkleRoot(self)
-		self.nonce = getNonce(self)
-		self.size = getSize(self)
+		self._merkle_root = getMerkleRoot(self)
+		self._nonce = getNonce(self)
+		self._size = getSize(self)
+
+	def __repr__(self):
+		return "<%s> Header of Block %s" %(self.timestamp, self.block.height)
+
 
 
 class Block(object):
-	def __init__(self, threshold = 4):
-		prev_block = dataStorage.getLocalHead()
-		self.header = BlockHeader(prev_block.hash,threshold, self)
+	__slots__ = ['header', 'transactions', 'flags', 'chain', 'threshold', 'hash', 'difficulty', 'signature', 'miner']
+
+	def __init__(self, chain, threshold = 4):
+		prev_block = chain.getHead()
+		if prev_block:
+			self.header = BlockHeader(prev_block,threshold, self)
+		else:
+			raise ValidityError("The chain has no Genesis")
 		self.transactions = []
-		self.height = prev_block.height + 1
 		self.flags = 0x00
+		self.chain = chain
+		self.threshold = threshold
+		
+	def addTransaction(sender_address, receiver_address, amount):
+		transaction = Transaction(sender_address, receiver_address, amount, self)
+		self.transactions.append(transaction)
+		self.flags = 0x11
+
+	def save(self):
+		self.hash = self.Hash(self)
+		self.difficulty = self.Difficulty(self.hash)
+		self.signature = None
+		self.miner = None
+		# self.signature = self.generateSignature(network.getCurrent().key())
+		# self.miner = network.getMiner(self)
+		# self.chain.append(self)
+		self.header.save()
 
 	def __repr__(self):
 		try:
@@ -64,49 +87,22 @@ class Block(object):
 		except:
 			return "Block %s" % self.height
 
-	def addTransaction(sender_address, receiver_address, amount):
-		transaction = Transaction(sender_address, receiver_address, amount, self)
-		self.transactions.append(transaction)
-		self.flags = 0x11
-
-	def save(self):
-		self.header.save()
-		# try:
-		# 	self.reward = self.transactions[0].amount
-		self.hash = self.Hash(self)
-		self.difficulty = self.Difficulty(self.hash)
-		self.signature = self.generateSignature(network.getCurrent().key())
-		self.miner = network.getMiner(self)
-		self.chain = network.getChain()
-		self.chain.append(self)
 
 
 class Transaction(object):
-	__slots__ = ['id', 'block', 'sender', 'receiver', 'chain']
+	__slots__ = ['id', 'block', 'sender', 'receiver', 'value', 'chain']
 	
 	def __init__(self, sender_address, receiver_address, amount, block):
-		self.chain = chain
 		self.id = self.Hash(sender_address, receiver_address, amount)
 		self.block = block
 		self.sender = sender_address
 		self.receiver = receiver_address
 		self.value = amount
-		chain.transactions.append(self.hash)
 	
 	def __repr__(self):
 		return "<%s> * %s *" %(self.block, self.hash[:10])
 
-	@classmethod
-	def verify(sender_address, receiver_addres, amount, chain):
-		inputs = getInputs(chain, sender_address)
-		sender_value = sum(inputs.value)
-		if amount + reward <= sender_value:
-			return True
-		return False
 
-	@classmethod
-	def getInputs(chain, address):
-		return filter(lambda u: u.receiver=address, chain.transactions)
 
 class indieChain(object):
 	__slots__ = ['transactions', 'blocks']
@@ -116,21 +112,27 @@ class indieChain(object):
 		self.transactions = []
 
 	def getHead(self):
-		try:
-			return self.blocks[-1]
-		else:
+		if blocks == []:
 			return None
+		else:
+			return self.blocks[-1]
 
 	def push(self, block):
 		def validateBlock(self, block):
 			head = self.getHead()
-			assert(isinstance(block, Block))
-			if self.blocks = []:
+			try:
+				assert(isinstance(block, Block))
+				assert(block.timestamp > head.timestamp)
+				assert(block.height > head.height)
+			except AssertionError:
+				return 'Block: Invalid type'
+			if self.blocks == []:
 				raise ValidityError("Initialise blockchain with Genesis block")
 			return (head.hash == block.header.previous_hash)
 
 		if validateBlock(block):
 			self.blocks.append(block)
+			self.transactions.append
 
 	def getGenesis(self):
 		if self.blocks == []:
@@ -138,5 +140,9 @@ class indieChain(object):
 		return self.blocks[0]
 
 	def generateGenesis(self, genesisBlock):
-		assert(isinstance(genesisBlock, Block))
+		try:
+			assert(isinstance(genesisBlock, Block))
+		except AssertionError:
+			return 'Genesis Block: Invalid type'
+		genesisBlock.header.height = 0
 		self.blocks.append(block)

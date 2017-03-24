@@ -1,43 +1,60 @@
 import network
+import dataStorage
 from utils import *
 from time import time
 
 class Node(object):
-	def __init__(self):
-		self.id = network.getLocalId()
-		self.nature = 'N'
+	__slots__ = ['id', 'role', 'chain']
 
-	def addBlock(block):
-		chain = dataStorage.getLocalChain()
-		if 
-		else:
-			raise ValidityError("Invalid block")
+	def __init__(self, chain):
+		self.id = network.getNetworkId()
+		self.role = 'N'
+		self.chain = chain
 
-	
+	def createBlock(self, chain, threshold):
+		assert(isinstance(chain, indieChain))
+		block = Block(chain, threshold)
+		return block
+
+	def addBlock(self, block, chain):
+		assert(isinstance(chain, indieChain))
+		assert(isinstance(block, Block))
+		chain.push(block)	
+
+	def __repr__(self):
+		return '<%s> %s' % (self.role, self.id)
+
+
 
 class Miner(Node):
-	def __init__(self):
-		self.id = network.getLocalId()
-		self.nature = 'M'
+	__slots__ = ['id', 'role', 'chain']
 
-	def validateBlock(block):
-		try:
-			if block.flags == 0x11:
-				for transaction in block.transactions:
-					if verify(transaction):
-						continue
-				return True
-		except TransactionError:
-			return False
+	def __init__(self, chain):
+		self.id = network.getNetworkId()
+		self.role = 'M'
+		self.chain = chain
 
+	def getNodeSignature(self):
+		pass
+
+	def addBlock(block, chain):
+		assert(isinstance(chain, indieChain))
+		assert(isinstance(block, Block))
+		if block.flags == 0x11 and reduce(lambda x, y: x and y, map(verifyTransaction, block.transactions)):
+			assert(consesus(chain, block))
+			block.miner = self
+			block.signature = self.getNodeSignature()
+			chain.push(block)
+		else:
+			raise TransactionError("Invalid transaction(s). Recheck Block.")
+			
 	@classmethod
-	def verify(sender_address, receiver_addres, amount, chain):
-		inputs = getInputs(chain, sender_address)
+	def verifyTransaction(transaction):
+		inputs = getInputs(transaction.sender)
 		sender_value = sum(inputs.value)
-		if amount + fee <= sender_value:
-			return True
-		raise TransactionError("Invalid transaction(s)")
+		return (amount + fee < sender_value)
 
 	@classmethod
-	def getInputs(chain, address):
+	def getInputs(address):
+		chain = transaction.chain
 		return filter(lambda u: u.receiver=address, chain.transactions)
