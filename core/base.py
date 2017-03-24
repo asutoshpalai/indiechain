@@ -8,25 +8,46 @@ class BlockHeader(object):
 		self.previous_hash = prev_hash
 		self.timestamp = time()
 		self.target_threshold = threshold
+		self.block = None
 	
-	def Root(block):
-		ids = [transaction for transaction in block.transactions]
-		#calculate merkle root and return
+	def getNonce(self):
+		block = self.block
 		pass
+	@property
+	def nonce(self):
+		return self._nonce
+	@nonce.setter
+	def nonce(self, value):
+		if value == getNonce(self):
+			self._nonce = value
+		else:
+			raise TypeError("Immutable data")
 
-	def Nonce():
+	def getMerkleRoot(self):
+		block = self.block
+		ids = [transaction for transaction in block.transactions]
 		pass
-	
+	@property
+	def merkle_root(self):
+		return self._merkle_root
+	@merkle_root.setter
+	def merkle_root(self, value):
+		if value == getMerkleRoot(self):
+			self._merkle_root = value
+		else:
+			raise TypeError("Immutable data")
+
 	def save(self, transactions, block):
-		self.merkle_root = Root(transactions)
-		self.nonce = Nonce(block)
-		self.size = getSize(block)
+		self.merkle_root = getMerkleRoot(self)
+		self.nonce = getNonce(self)
+		self.size = getSize(self)
 
 
 class Block(object):
 	def __init__(self, threshold = 4):
 		prev_block = network.getLocalHead()
 		self.header = BlockHeader(prev_block.hash,threshold)
+		self.header.block = self
 		self.flags = 0x00
 		self.transactions = []
 		self.height = prev_block.height + 1
@@ -41,6 +62,7 @@ class Block(object):
 			return 'Invalid transaction. Try again.'	
 
 	def save(self):
+		self.header.save()
 		self.reward = 0
 		self.hash = self.Hash(self)
 		self.difficulty = self.Difficulty(self.hash)
