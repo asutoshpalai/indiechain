@@ -1,16 +1,20 @@
 import network
+import dataStorage
 from utils import *
 from time import time
 
 class BlockHeader(object):
 	__slots__ = ['previous_hash', 'merkle_root', 'timestamp', 'target_threshold', 'nonce', 'size', 'block']
 	
-	def __init__(self, prev_hash, threshold):
+	def __init__(self, prev_hash, threshold, block):
 		self.previous_hash = prev_hash
 		self.timestamp = time()
 		self.target_threshold = threshold
-		self.block = None
+		self.block = block
 	
+	def __repr__(self):
+		return "<%s> Header of Block %s" %(self.timestamp, self.block)
+
 	def getNonce(self):
 		block = self.block
 		pass
@@ -48,25 +52,27 @@ class BlockHeader(object):
 
 class Block(object):
 	def __init__(self, threshold = 4):
-		prev_block = network.getLocalHead()
-		self.header = BlockHeader(prev_block.hash,threshold)
-		self.header.block = self
-		self.flags = 0x01
+		prev_block = dataStorage.getLocalHead()
+		self.header = BlockHeader(prev_block.hash,threshold, self)
 		self.transactions = []
 		self.height = prev_block.height + 1
+		self.flags = 0x00
+
+	def __repr__(self):
+		try:
+			return "Block %s : <%s>" %(self.height, self.hash)
+		except:
+			return "Block %s" % self.height
 
 	def addTransaction(sender_address, receiver_address, amount):
-		try:
-			transaction = Transaction(sender_address, receiver_address, amount, self)
-			self.transactions.append(transaction)
-			self.flags = 0x11
-		except TransactionError:
-			return 'Invalid transaction. Try again.'	
+		transaction = Transaction(sender_address, receiver_address, amount, self)
+		self.transactions.append(transaction)
+		self.flags = 0x11
 
 	def save(self):
 		self.header.save()
-		try:
-			self.reward = self.transactions[0].amount
+		# try:
+		# 	self.reward = self.transactions[0].amount
 		self.hash = self.Hash(self)
 		self.difficulty = self.Difficulty(self.hash)
 		self.signature = self.generateSignature(network.getCurrent().key())
@@ -79,15 +85,13 @@ class Transaction(object):
 	__slots__ = ['id', 'block', 'sender', 'receiver', 'chain']
 	
 	def __init__(self, sender_address, receiver_address, amount, block):
-		if verify(sender_address, receiver_address, amount, block.chain):
-			self.chain = chain
-			self.id = self.Hash(sender_address, receiver_address, amount)
-			self.block = block
-			self.sender = sender_address
-			self.receiver = receiver_address
-			chain.transactions.append(self.hash)
-		else:
-			raise TransactionError
+		self.chain = chain
+		self.id = self.Hash(sender_address, receiver_address, amount)
+		self.block = block
+		self.sender = sender_address
+		self.receiver = receiver_address
+		self.value = amount
+		chain.transactions.append(self.hash)
 	
 	def __repr__(self):
 		return "<%s> * %s *" %(self.block, self.hash[:10])
@@ -106,3 +110,33 @@ class Transaction(object):
 
 class indieChain(object):
 	__slots__ = ['transactions', 'blocks']
+
+	def __init__(self):
+		self.blocks = []
+		self.transactions = []
+
+	def getHead(self):
+		try:
+			return self.blocks[-1]
+		else:
+			return None
+
+	def push(self, block):
+		def validateBlock(self, block):
+			head = self.getHead()
+			assert(isinstance(block, Block))
+			if self.blocks = []:
+				raise ValidityError("Initialise blockchain with Genesis block")
+			return (head.hash == block.header.previous_hash)
+
+		if validateBlock(block):
+			self.blocks.append(block)
+
+	def getGenesis(self):
+		if self.blocks == []:
+			return None
+		return self.blocks[0]
+
+	def generateGenesis(self, genesisBlock):
+		assert(isinstance(genesisBlock, Block))
+		self.blocks.append(block)
