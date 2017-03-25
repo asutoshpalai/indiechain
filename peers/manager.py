@@ -2,12 +2,15 @@ from .peer import Peer
 from struct import unpack
 import socket
 import logging
+from asyncio import new_event_loop, coroutine
+from threading import Thread
 from .helpers import *
 from .consts import *
 
 class Manager():
     def __init__(self, ip, port):
         ip = socket.gethostbyname(ip)
+        self.loop = new_event_loop()
 
         self.ip = ip
         self.port = port
@@ -17,6 +20,7 @@ class Manager():
             serversocket.bind(('', port)) # listen for all connections
         else:
             serversocket.bind((ip, port))
+
         serversocket.listen(5)
         self.socket = serversocket
         self.peers = {}
@@ -25,10 +29,19 @@ class Manager():
         self.alive = True
 
     def activity_loop(self):
+        Thread(target=lambda: self.loop.run_forever()).start()
+        #self.loop.create_task(self._server_loop())
+        #self.loop.run_forever()
+        self._server_loop()
+
+    # @coroutine
+    def _server_loop(self):
         while True and self.alive == True:
+            # clientsocket,addr = yield from self.loop.sock_accept(self.socket)
             clientsocket,addr = self.socket.accept()
             self.log.info("Received a connection from {}".format(addr))
             self.handle_conn(clientsocket, addr)
+
 
     def handle_conn(self, socket, addr):
         hi = receive_hi(socket)
@@ -40,7 +53,7 @@ class Manager():
 
         self.log.info("Peer {} successfully handshaked".format(peer_id))
 
-        self._add_peer(proto_v, ip, port, peer_id)
+        return self._add_peer(proto_v, int2ip(ip), port, peer_id, socket)
 
     def connect_to_peer(self, host, port):
         soc = socket.create_connection((host, port))
@@ -52,17 +65,16 @@ class Manager():
         assert proto_v == PROTO_VERSION
 
         self.log.info("Peer {} successfully connected".format(peer_id))
-        self._add_peer(proto_v, ip, port, peer_id)
+        return self._add_peer(proto_v, int2ip(ip), port, peer_id, soc)
 
-    def _add_peer(self, proto_v, ip, port, peer_id):
+    def _add_peer(self, proto_v, ip, port, peer_id, sock):
         if peer_id in self.peers:
             peer = peers[peer_id]
         else:
             peer = Peer(self, peer_id, proto_v, ip, port)
             self.peers[peer_id] = Peer
-        peer.receive_conn(socket)
-
-
+        peer.receive_conn(sock)
+        return peer
 
     def close(self):
         self.log.info("Shutting down")
