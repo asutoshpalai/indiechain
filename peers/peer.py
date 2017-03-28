@@ -14,24 +14,23 @@ class Peer():
         self.ip = ip
         self.port = port
 
-    def receive_conn(self, sock):
+    async def receive_conn(self, sock):
         self.socket = sock
         loop = self.manager.loop
-        connect_coro = loop.create_connection(lambda: PeerAsync(self), sock=sock)
-        print(connect_coro)
-        # loop.run_until_complete(connect_coro)
-        # loop.call_soon(connect_coro)
-        # print(dir(loop))
-        # loop.run_in_executor(connect_coro)
-        # asyncio.ensure_future(connect_coro, loop=loop)
-        # asyncio.async(connect_coro, loop=loop)
-        asyncio.run_coroutine_threadsafe(connect_coro, loop)
+        transport, protocol = await loop.create_connection(lambda: PeerAsync(self), sock=sock)
+        self.transport = transport
+        # reader, writer = await asyncio.open_connection(sock=sock, loop = loop)
+        self.reader = asyncio.StreamReader(loop=loop)
+        self.writer = asyncio.StreamWriter(transport, protocol, self.reader, loop)
+        # loop.add_reader(sock.fileno(), self.data_received)
+        # asyncio.run_coroutine_threadsafe(connect_coro, loop)
+        # transport, protocol = await connect_coro()
 
-    def _add_to_async_listen(self, sock):
-        pass
-
-    def send_raw_data(self, data):
-        return self.socket.sendall(data)
+    async def send_raw_data(self, data):
+        # loop = self.manager.loop
+        # await loop.sock_sendall(self.socket, dat a)
+        self.writer.write(data)
+        await self.writer.drain()
 
     def data_received(self, data):
         print("Received data:" + str(data))
@@ -41,3 +40,7 @@ class Peer():
             message = control_message((GET_STATE, 4))
             s.sendall(message)
             data = s.recv(1024)
+
+    def get_headers(self):
+        pass
+
