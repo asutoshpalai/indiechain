@@ -16,11 +16,12 @@ class Peer():
         self.port = port
         self.log = logging.getLogger('Peer {} of {}'.format(self.id, manager.id))
 
-    async def receive_conn(self, sock):
+    @asyncio.coroutine
+    def receive_conn(self, sock):
         self.socket = sock
         loop = self.manager.loop
-        # loop.add_reader(sock.fileno(), self._data_cb)
-        reader, writer = await asyncio.open_connection(sock=sock, loop=loop)
+        # reader, writer = yield from asyncio.open_connection(sock=sock, loop=loop)
+        loop.add_reader(sock.fileno(), self._data_cb)
         # reader = PeerStreamReader(self._data_cb, loop=loop)
         # protocol = asyncio.StreamReaderProtocol(reader, loop=loop)
         # transport, _ = await loop.create_connection(lambda: protocol, sock=sock)
@@ -28,20 +29,21 @@ class Peer():
         # self.reader = reader
         # self.writer = writer
         self.log.debug("Connection created")
-        data = await reader.read(1024)
-        print("data received" + str(data))
+        # data = await reader.read(1024)
+        # print("data received" + str(data))
 
     def _data_cb(self):
         self.log.debug("Data recevied cb called")
-        data = self.reader.read(1024)
+        data = self.socket.recv(1024)
         self.data_received(data)
 
 
-    async def send_raw_data(self, data):
+    @asyncio.coroutine
+    def send_raw_data(self, data):
         # loop = self.manager.loop
         # await loop.sock_sendall(self.socket, dat a)
-        self.writer.write(data)
-        await self.writer.drain()
+        self.socket.send(data)
+        # yield from self.writer.drain()
         self.log.debug("Sent raw data")
 
     def data_received(self, data):
