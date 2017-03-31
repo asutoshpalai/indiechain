@@ -33,6 +33,7 @@ class Manager():
 
     async def _server_loop(self):
         while True and self.alive == True:
+            self.log.debug("Waiting for peer connection")
             clientsocket,addr = await self.loop.sock_accept(self.socket)
             # clientsocket,addr = self.socket.accept()
             self.log.info("Received a connection from {}".format(addr))
