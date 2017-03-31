@@ -2,6 +2,70 @@ import network
 import dataStorage
 from utils import *
 from time import time
+from hashlib import sha256
+
+class UTXO(object):
+	_N = 3333333333333333333333333333333337333333333333333333333333333333333 #Large Prime
+	__slots__ = ['id', 'transaction', 'sender', 'receiver', 'value', 'timestamp', 'lockingScript', 'unlockingScript']
+	
+	def __init__(self, sender_address, receiver_address, amount, block):
+		try:
+			self._sender = dataStorage.getWallet(sender_address)
+			self._receiver = dataStorage.getWallet(receiver_address)
+		except:
+			return 'Invalid addresses. Try again.'
+		self.block = block
+		self.value = amount
+		self.timestamp = time()
+		self.id = self.Hash(sender_address, receiver_address, amount)
+
+	@property
+	def sender(self):
+		return self._sender
+	@sender.setter
+	def sender(self, value):
+		raise TypeError("Immutable data")
+
+	@property
+	def receiver(self):
+		return self._receiver
+	@sender.setter
+	def receiver(self, value):
+		raise TypeError("Immutable data")
+
+	def signature(self):
+		return math.pow(self.id, self.sender.privateKey, self._N)
+
+	def __repr__(self):
+		return "<%s> * %s *" %(self.block, self.id[:10])
+
+		#set if caller is of type 'M'
+		#else raise ValidityError
+
+
+class Transaction(object):
+	__slots__ = ['utxos', 'block', 'reward']
+
+	def __init__(self, block):
+		self.block = block
+		self.utxos = []
+		self.reward = 0
+
+	def addUTXO(utxo):
+		assert(isinstance(utxo, UTXO))
+		self.utxos.append(utxo) 
+
+	def save(self):
+		self_payment = sum(filter(lambda u: u.sender == u.receiver), utxos)
+		outflow = sum(filter(lambda u: u.sender != u.receiver), utxos)
+		reward = sum([utxo.sender.getBalance() for utxo in utxos]) - sum([self_payment, outflow])
+		try:
+			assert(reward > 0)
+		except AssertionError:
+			raise TransactionError("Non-positive reward not permitted")
+		self.reward = reward
+
+
 
 class BlockHeader(object):
 	__slots__ = ['previous_hash', 'merkle_root', 'timestamp', 'target_threshold', 'nonce', 'size', 'block']
@@ -12,9 +76,16 @@ class BlockHeader(object):
 		self.target_threshold = threshold
 		self.block = block
 		self.height = prev_block.header.height + 1
+		self.size = 0
 	
-	def getNonce(self):
+	def save(self, nonce, size):
+		self.merkle_root = getMerkleRoot(self)
+		self._nonce = nonce
+		self.size = size
+
+	def getMerkleRoot(self):
 		block = self.block
+		ids = [transaction.id for transaction in block.transactions]
 		pass
 	
 	@property
@@ -22,15 +93,7 @@ class BlockHeader(object):
 		return self._nonce
 	@nonce.setter
 	def nonce(self, value):
-		if value == getNonce(self):
-			self._nonce = value
-		else:
-			raise TypeError("Immutable data")
-
-	def getMerkleRoot(self):
-		block = self.block
-		ids = [transaction.id for transaction in block.transactions]
-		pass
+		raise TypeError("Immutable data")
 	
 	@property
 	def merkle_root(self):
@@ -42,20 +105,20 @@ class BlockHeader(object):
 		else:
 			raise TypeError("Immutable data")
 
-	def save(self, transactions, block):
-		self._merkle_root = getMerkleRoot(self)
-		self._nonce = getNonce(self)
-		self._size = getSize(self)
-
 	def __repr__(self):
 		return "<%s> Header of Block %s" %(self.timestamp, self.block.height)
 
-
+	def __str__(self):
+		return reduce(lambda x,y: x + '|' + y, [str(getattr(self, attr)) for attr in self.__slots__])
 
 class Block(object):
-	__slots__ = ['header', 'transactions', 'flags', 'chain', 'threshold', 'hash', 'difficulty', 'signature', 'miner']
+	__slots__ = ['header', 'transactions', 'flags', 'chain', 'threshold', 'hash', 'signature', 'miner', '_N', 'node']
 
 	def __init__(self, chain, threshold = 4):
+		try:
+			assert(threshold >= 4)
+		except AssertionError:
+			return ValidityError("Threshold must be GTE 4")
 		prev_block = chain.getHead()
 		if prev_block:
 			self.header = BlockHeader(prev_block,threshold, self)
@@ -65,44 +128,27 @@ class Block(object):
 		self.flags = 0x00
 		self.chain = chain
 		self.threshold = threshold
-		
-	def addTransaction(sender_address, receiver_address, amount):
-		transaction = Transaction(sender_address, receiver_address, amount, self)
+
+	def save(self, nonce):
+		self.hash = self.doubleHash(self)
+		size = len(str(self.block))
+		self.header.save(nonce, size)
+
+	def addTransaction(Transaction)
 		self.transactions.append(transaction)
 		self.flags = 0x11
 
-	def save(self):
-		self.hash = self.Hash(self)
-		self.difficulty = self.Difficulty(self.hash)
-		self.signature = None
-		self.miner = None
-		# self.signature = self.generateSignature(network.getCurrent().key())
-		# self.miner = network.getMiner(self)
-		# self.chain.append(self)
-		self.header.save()
+	def doubleHash(self):
+		return sha256(sha256(str(self)).hexdigest()).hexdigest()
 
 	def __repr__(self):
 		try:
-			return "Block %s : <%s>" %(self.height, self.hash)
+			return "Block <%s>" %(self.height, self.hash)
 		except:
 			return "Block %s" % self.height
 
-
-
-class Transaction(object):
-	__slots__ = ['id', 'block', 'sender', 'receiver', 'value', 'chain']
-	
-	def __init__(self, sender_address, receiver_address, amount, block):
-		self.id = self.Hash(sender_address, receiver_address, amount)
-		self.block = block
-		self.sender = sender_address
-		self.receiver = receiver_address
-		self.value = amount
-	
-	def __repr__(self):
-		return "<%s> * %s *" %(self.block, self.hash[:10])
-
-
+	def __str__(self):
+		return reduce(lambda x,y: x + '|' + y, [str(getattr(self, attr)) for attr in self.__slots__ if attr != 'hash'])
 
 class indieChain(object):
 	__slots__ = ['transactions', 'blocks']
@@ -118,7 +164,7 @@ class indieChain(object):
 			return self.blocks[-1]
 
 	def push(self, block):
-		def validateBlock(self, block):
+		def validateBlock(block):
 			head = self.getHead()
 			try:
 				assert(isinstance(block, Block))
@@ -146,3 +192,4 @@ class indieChain(object):
 			return 'Genesis Block: Invalid type'
 		genesisBlock.header.height = 0
 		self.blocks.append(block)
+		
