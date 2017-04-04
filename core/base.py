@@ -7,13 +7,12 @@ from hashlib import sha256
 class UTXO(object):
 	__slots__ = ['id', 'transaction', 'sender', 'receiver', 'value', 'timestamp', 'inputs']
 	
-	def __init__(self, sender_address, receiver_address, amount, block):
+	def __init__(self, sender_address, receiver_address, amount):
 		try:
-			self._sender = dataStorage.getWallet(sender_address)
-			self._receiver = dataStorage.getWallet(receiver_address)
+			self._sender = sender_address
+			self._receiver = receiver_address
 		except:
 			raise ValidityError('Invalid addresses. Try again.')
-		# self.block = block
 		self.value = amount
 		self.amount = amount
 		self.timestamp = time()
@@ -155,7 +154,7 @@ class indieChain(object):
 			head = self.getHead()
 			try:
 				assert(isinstance(block, Block))
-				assert(block.timestamp > head.timestamp)
+				# assert(block.timestamp > head.timestamp)
 				assert(block.height > head.height)
 			except AssertionError:
 				return 'Block: Invalid type'
@@ -165,7 +164,7 @@ class indieChain(object):
 			return (head.hash == block.header.previous_hash)
 
 		if validateBlock(block):
-			self.blocks.append(block)
+			self.blocks.append({'block': block, 'id': block.hash})
 			for transaction in block.transactions:
 				self.transactions.append(transaction)
 
@@ -180,4 +179,9 @@ class indieChain(object):
 		except AssertionError:
 			return 'Genesis Block: Invalid type'
 		genesisBlock.header.height = 0
-		self.blocks.append(block)
+		self.blocks.append({'block': block, 'id': block.hash})
+
+	def getBlock(id):
+		for block in self.blocks:
+			if block.id == id:
+				return block

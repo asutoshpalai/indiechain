@@ -12,14 +12,13 @@ class Wallet(object):
 		assert(isinstance(node, Node))
 		self.node = node
 		self.publicKey = node.getPublicKey()
-		self.receiver_endpoint = []
 		self.sender_endpoint = []
-		self.initial_amount = initial_amount
 		self.address = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
+		coinbaseTransaction = UTXO(self.address, self.address, initial_amount)
+		self.receiver_endpoint = [{'data': coinbaseTransaction, 'used': False}]
 
 	def makePayment(self, receiver_address, amount):
 		utxo = UTXO(self.address, receiver_address, amount)
-		receiver = dataStorage.getWallet(receiver_address)
 		self_inputs = filter(lambda u: u['used'] is False, self.receiver_endpoint)
 		larger_input = filter(lambda u: u['data'].amount >= amount ,self_inputs)
 		if larger_input:
@@ -36,8 +35,9 @@ class Wallet(object):
 				else:
 					break
 		if not utxo.inputs:
-			raise TransactionError("Cannot make the required transaction, due to insufficient funds.")
-		receiver.receiver_endpoint.append({'data': utxo, 'used': False})
+			raise TransactionError("Cannot make the required transaction, due to insufficient balance.")
+		#destination = network.getWallet(receiver_address)
+		#destination.receiveUTXO(utxo)
 		self.sender_endpoint.append(utxo)
 
 	def finalizeTransaction(self, utxos):
@@ -46,14 +46,16 @@ class Wallet(object):
 		signTransaction(transaction)
 		self.node.pushTransaction(transaction)
 
+	def receiveUTXO(self, utxo)
+		self.receiver_endpoint.append({'data': utxo, 'used': False})
+
 	@classmethod
 	def signTransaction(transaction):
 		assert(isinstance(transaction, Transaction))
-		transaction_hash = str(transaction)
-		transaction.signature = self.node._key.sign(transaction_hash, None)
+		transaction.signature = self.node._key.sign(str(transaction), None)
 
-class Node(object):`
-	MAX_POOL_LIMIT = 10
+class Node(object):
+	MAX_TX_LIMIT = 10
 	__slots__ = ['id', 'ROLE', 'chain', 'pool', '_key']
 	ROLE = 'N'
 
@@ -69,8 +71,8 @@ class Node(object):`
 			key = RSA.importKey(write_key.read())
 		else:
 			key = RSA.generate(2048)
-			write_key = open("../.indiechain/.rsa/private.pem", 'w').write(key.exportKey())
-			write_key = open("../.indiechain/.rsa/public.pem", 'w').write(key.publicKey().exportKey())
+			write_key = open("../.config/.rsa/private.pem", 'w').write(key.exportKey())
+			write_key = open("../.config/.rsa/public.pem", 'w').write(key.publicKey().exportKey())
 		write_key.close()
 		self._key = key
 		return key.publicKey()
@@ -79,7 +81,7 @@ class Node(object):`
 		block.signature = self._key.sign(block.hash, None)
 		block.node = self
 
-	def createBlock(self,threshold):
+	def createBlock(self, threshold = 4):
 		self.current_block = Block(self.chain, threshold)
 		if self.pool != []:
 			for transaction in self.pool:
@@ -91,21 +93,14 @@ class Node(object):`
 			assert(isinstance(block, Block))
 			self.signBlock(block)
 			peer_miner = network.getMiner()
-			peer_miner.addBlock(block, block.chain)
-			self.chain.push(block)
+			try:
+				peer_miner.addBlock(block, block.chain)
+				self.chain.push(block)
+			except TransactionError:
+				correct, faulty = peer_miner.analyseBlock(block, block.chain)
+				self.pool += correct
 		except AssertionError:
 			raise TypeError("Incorrect data instance")
-		except:
-			raise ValidityError("Invalid transactions")
-
-	# Node adds the tran
-	def orphanisePool(block):
-		assert(isinstance(block, Block))
-		assert(len(pool) < MAX_POOL_LIMIT)
-		for transaction in block.transactions:
-			if not parent(transaction):
-				self.pool.append(transaction)
-		return pool == []
 
 	def pushTransaction(self, transaction):
 		self.current_block.addTransaction(transaction)
@@ -113,9 +108,13 @@ class Node(object):`
 		for peer in peers:
 			peer.receiveTransaction(transaction)
 
+	#listening service
 	def receiveTransaction(self, transaction):
 		if transaction not in self.current_block.transactions:
 			self.current_block.addTransaction(transaction)
+		if len(self.current_block.transactions) > MAX_TX_LIMIT:
+			self.addBlock(self.current_block)
+			self.createBlock()
 
 	def __repr__(self):
 		return '<%s> %s' % (self.ROLE, self.id)
@@ -123,14 +122,7 @@ class Node(object):`
 
 
 class Miner(Node):
-	__slots__ = ['id', 'role', 'chain', 'pool']
 	ROLE = 'M'
-
-	def __init__(self, chain):
-		self.id = network.getNetworkId()
-		self.chain = chain
-		self.pool = []
-
 
 	def addBlock(block, chain):
 		assert(isinstance(chain, indieChain))
@@ -142,7 +134,7 @@ class Miner(Node):
 				return
 		if reduce(lambda x, y: x and y, map(verifyTransaction, block.transactions)):
 			try:
-				assert(block.nonce[:block.threshold] == '0'*block.threshold)
+				# assert(block.nonce[:block.threshold] == '0'*block.threshold)
 				assert(consesus(chain, block))
 			except AssertionError:
 				for transaction in block.transactions:
@@ -168,8 +160,8 @@ class Miner(Node):
 		# try:
 		# 	assert(merkleVerify(transaction))
 		# except:
-		# 	raise ValidityError("Merkle Tree: Transaction route doesn't exist in block")
-		signer = transaction.sender.node.getPublicKey()
+		# 	raise ValidityError("Merkle Tree: Transaction route doesn't exist in block")		
+		signer = network.getNodePublicKey(transaction.sender) #get pubkey given wallet address
 		try:
 			assert(signer.verify(str(transaction), transaction.signature))
 		except AssertionError:
