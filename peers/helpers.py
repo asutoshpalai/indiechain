@@ -2,6 +2,7 @@ from struct import pack, unpack
 from socket import inet_ntoa, inet_aton
 from .consts import *
 import random
+import pickle
 
 TYPE_MAP = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
 
@@ -32,3 +33,20 @@ def get_headers_msg(known_header):
 
 def generate_id():
     return random.getrandbits(64)
+
+def serialize_transaction(transaction):
+    pick = pickle.dumps(transaction)
+    return pack(TRX_HEADER_FMT, TRX_HEADER, len(pick)) + pick
+
+def trx_packet(transaction):
+    trx = serialize_transaction(transaction)
+    return pack(">I", START_STRING) + trx
+
+def deserialize_trx(data):
+    header = data[:TRX_HEADER_LENGTH]
+    body = data[TRX_HEADER_LENGTH:]
+    h_type, l = unpack(TRX_HEADER_FMT, header)
+    assert h_type == TRX_HEADER
+    assert len(body) == l
+
+    return pickle.loads(body)

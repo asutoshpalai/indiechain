@@ -9,14 +9,19 @@ from .helpers import *
 from .consts import *
 
 class Manager():
-    def __init__(self, ip, port):
+    def __init__(self, ip, port, id = False):
         ip = socket.gethostbyname(ip)
         self.loop = new_event_loop()
         self.loop.set_debug(True)
 
         self.ip = ip
         self.port = port
-        self.id = generate_id()
+
+        if id:
+            self.id = id
+        else:
+            self.id = generate_id()
+
         serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         if ip == '127.0.0.1':
             serversocket.bind(('', port)) # listen for all connections
@@ -29,6 +34,11 @@ class Manager():
         self.log = logging.getLogger('Peer Manager {}'.format(self.id))
         self.log.info("initialised at port {} with ip {}".format(port, ip))
         self.alive = True
+
+        self.node = False
+
+    def setNode(self, node):
+        self.node = node
 
     def activity_loop(self):
         self.loop.run_until_complete(self._server_loop())
@@ -87,3 +97,9 @@ class Manager():
         self.socket.close()
         self.alive = False
         self.log.info("Shut down successful")
+
+    def receiveTransaction(self, trx):
+        self.log.info("recevied transaction: " + repr(trx))
+
+        if self.node:
+            node.receiveTransaction(trx)
