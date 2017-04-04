@@ -5,19 +5,21 @@ from time import time
 from hashlib import sha256
 
 class UTXO(object):
-	_N = 3333333333333333333333333333333337333333333333333333333333333333333 #Large Prime
-	__slots__ = ['id', 'transaction', 'sender', 'receiver', 'value', 'timestamp', 'lockingScript', 'unlockingScript']
+	__slots__ = ['id', 'transaction', 'sender', 'receiver', 'value', 'timestamp', 'inputs']
 	
 	def __init__(self, sender_address, receiver_address, amount, block):
 		try:
 			self._sender = dataStorage.getWallet(sender_address)
 			self._receiver = dataStorage.getWallet(receiver_address)
 		except:
-			return 'Invalid addresses. Try again.'
-		self.block = block
+			raise ValidityError('Invalid addresses. Try again.')
+		# self.block = block
 		self.value = amount
+		self.amount = amount
 		self.timestamp = time()
-		self.id = self.Hash(sender_address, receiver_address, amount)
+		self.id = sha256(map(str, [self.sender, self.receiver, self.timestamp])).hashdigest()
+		self.inputs = []
+		self.transaction = None
 
 	@property
 	def sender(self):
@@ -33,39 +35,26 @@ class UTXO(object):
 	def receiver(self, value):
 		raise TypeError("Immutable data")
 
-	def signature(self):
-		return math.pow(self.id, self.sender.privateKey, self._N)
-
 	def __repr__(self):
 		return "<%s> * %s *" %(self.block, self.id[:10])
 
-		#set if caller is of type 'M'
-		#else raise ValidityError
-
 
 class Transaction(object):
-	__slots__ = ['utxos', 'block', 'reward']
+	__slots__ = ['utxos', 'block', 'sender', 'signature']
 
-	def __init__(self, block):
-		self.block = block
-		self.utxos = []
-		self.reward = 0
+	def __init__(self,utxos):
+		for utxo in utxos:
+			assert(isinstance(utxo, UTXO))
+		self.utxos = utxos 
+		if self.utxos != []:
+		self.sender = utxos[0].sender
+			try:
+				assert(reduce(lambda x, y: x.sender == sender and y, self.utxos))
+			except AssertionError:
+				raise ValidityError("UTXOs of a given transaction must have same sender.")
 
-	def addUTXO(utxo):
-		assert(isinstance(utxo, UTXO))
-		self.utxos.append(utxo) 
-
-	def save(self):
-		self_payment = sum(filter(lambda u: u.sender == u.receiver), utxos)
-		outflow = sum(filter(lambda u: u.sender != u.receiver), utxos)
-		reward = sum([utxo.sender.getBalance() for utxo in utxos]) - sum([self_payment, outflow])
-		try:
-			assert(reward > 0)
-		except AssertionError:
-			raise TransactionError("Non-positive reward not permitted")
-		self.reward = reward
-
-
+	def __str__(self):
+		return ''.join(map(lambda u: str(u.id), self.utxos)) + str(self.sender.address)
 
 class BlockHeader(object):
 	__slots__ = ['previous_hash', 'merkle_root', 'timestamp', 'target_threshold', 'nonce', 'size', 'block']
@@ -130,16 +119,14 @@ class Block(object):
 		self.threshold = threshold
 
 	def save(self, nonce):
-		self.hash = self.doubleHash(self)
 		size = len(str(self.block))
 		self.header.save(nonce, size)
+		self.timestamp = time()
+		self.hash = sha256(sha256(str(self)).hexdigest()).hexdigest()
 
 	def addTransaction(Transaction)
 		self.transactions.append(transaction)
 		self.flags = 0x11
-
-	def doubleHash(self):
-		return sha256(sha256(str(self)).hexdigest()).hexdigest()
 
 	def __repr__(self):
 		try:
@@ -173,12 +160,14 @@ class indieChain(object):
 			except AssertionError:
 				return 'Block: Invalid type'
 			if self.blocks == []:
-				raise ValidityError("Initialise blockchain with Genesis block")
+				block.height = 0
+				print '<Genesis Block>'
 			return (head.hash == block.header.previous_hash)
 
 		if validateBlock(block):
 			self.blocks.append(block)
-			self.transactions.append
+			for transaction in block.transactions:
+				self.transactions.append(transaction)
 
 	def getGenesis(self):
 		if self.blocks == []:
@@ -192,4 +181,3 @@ class indieChain(object):
 			return 'Genesis Block: Invalid type'
 		genesisBlock.header.height = 0
 		self.blocks.append(block)
-		
