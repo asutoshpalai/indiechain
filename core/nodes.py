@@ -126,11 +126,10 @@ class Miner(Node):
 	__slots__ = ['id', 'role', 'chain', 'pool']
 	ROLE = 'M'
 
-	def __init__(self, wallet_address, chain):
+	def __init__(self, chain):
 		self.id = network.getNetworkId()
 		self.chain = chain
 		self.pool = []
-		self.wallet = dataStorage.getWallet(wallet_address)
 
 
 	def addBlock(block, chain):
@@ -162,8 +161,6 @@ class Miner(Node):
 			
 	@classmethod
 	def verifyTransaction(transaction):
-		def verifySignature(utxo):
-			return math.pow(utxo.lockingScript(), utxo.sender.publicKey, utxo._N)
 		try:
 			assert(isinstance(transaction, Transaction))
 		except:
@@ -172,14 +169,11 @@ class Miner(Node):
 		# 	assert(merkleVerify(transaction))
 		# except:
 		# 	raise ValidityError("Merkle Tree: Transaction route doesn't exist in block")
-		
-		assert(signerPublicKey.verify(str(block), block.signature))
-
-		for utxo in transaction.utxos:
-			try:
-				assert(unlock(utxo) == utxo.id)
-			except AssertionError:
-				raise TransactionError(str(transaction) + ": Invalid transaction")
+		signer = transaction.sender.node.getPublicKey()
+		try:
+			assert(signer.verify(str(transaction), transaction.signature))
+		except AssertionError:
+				raise TransactionError(str(transaction) + ": Unauthorized transaction")
 		return True
 
 	@classmethod
