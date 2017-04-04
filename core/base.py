@@ -1,52 +1,52 @@
-import network
-import dataStorage
 from utils import *
 from time import time
 from hashlib import sha256
+from functools import reduce
 
 class UTXO(object):
-	__slots__ = ['id', 'transaction', 'sender', 'receiver', 'value', 'timestamp', 'inputs']
+	# __slots__ = ['id', 'transaction', 'sender', 'receiver', 'value', 'timestamp']
 	
 	def __init__(self, sender_address, receiver_address, amount):
 		try:
-			self._sender = sender_address
-			self._receiver = receiver_address
+			self.sender = sender_address
+			self.receiver = receiver_address
 		except:
 			raise ValidityError('Invalid addresses. Try again.')
 		self.value = amount
-		self.amount = amount
 		self.timestamp = time()
-		self.id = sha256(map(str, [self.sender, self.receiver, self.timestamp])).hashdigest()
-		self.inputs = []
+		self.id = sha256((self.sender + self.receiver + str(self.timestamp)).encode('utf-8')).hexdigest()
 		self.transaction = None
 
-	@property
-	def sender(self):
-		return self._sender
-	@sender.setter
-	def sender(self, value):
-		raise TypeError("Immutable data")
+	# @property
+	# def sender(self):
+	# 	return self._sender
+	# @sender.setter
+	# def sender(self, value):
+	# 	raise TypeError("Immutable data")
 
-	@property
-	def receiver(self):
-		return self._receiver
-	@sender.setter
-	def receiver(self, value):
-		raise TypeError("Immutable data")
+	# @property
+	# def receiver(self):
+	# 	return self._receiver
+	# @receiver.setter
+	# def receiver(self, value):
+	# 	raise TypeError("Immutable data")
 
 	def __repr__(self):
-		return "<%s> * %s *" %(self.block, self.id[:10])
-
+		try:
+			return "<%s> * %s *" %(self.block, self.id[:10])
+		except:
+			return "%s" %(self.id)
 
 class Transaction(object):
-	__slots__ = ['utxos', 'block', 'sender', 'signature']
+	__slots__ = ['utxos', 'block', 'sender', 'signature', 'inputs']
 
 	def __init__(self,utxos):
+		self.inputs = []
 		for utxo in utxos:
 			assert(isinstance(utxo, UTXO))
 		self.utxos = utxos 
 		if self.utxos != []:
-		self.sender = utxos[0].sender
+			self.sender = utxos[0].sender
 			try:
 				assert(reduce(lambda x, y: x.sender == sender and y, self.utxos))
 			except AssertionError:
@@ -55,8 +55,11 @@ class Transaction(object):
 	def __str__(self):
 		return ''.join(map(lambda u: str(u.id), self.utxos)) + str(self.sender.address)
 
+	def __repr__(self):
+		return self.sender + ': ' + ''.join([utxo.id for utxo in self.utxos])
+
 class BlockHeader(object):
-	__slots__ = ['previous_hash', 'merkle_root', 'timestamp', 'target_threshold', 'nonce', 'size', 'block']
+	# __slots__ = ['previous_hash', 'merkle_root', 'timestamp', 'target_threshold', 'nonce', 'size', 'block']
 	
 	def __init__(self, prev_block, threshold, block):
 		self.previous_hash = prev_block.hash
@@ -100,7 +103,7 @@ class BlockHeader(object):
 		return reduce(lambda x,y: x + '|' + y, [str(getattr(self, attr)) for attr in self.__slots__])
 
 class Block(object):
-	__slots__ = ['header', 'transactions', 'flags', 'chain', 'threshold', 'hash', 'signature', 'miner', '_N', 'node']
+	__slots__ = ['header', 'transactions', 'flags', 'chain', 'threshold', 'hash', 'signature', 'miner', 'node']
 
 	def __init__(self, chain, threshold = 4):
 		try:
@@ -123,7 +126,7 @@ class Block(object):
 		self.timestamp = time()
 		self.hash = sha256(sha256(str(self)).hexdigest()).hexdigest()
 
-	def addTransaction(Transaction)
+	def addTransaction(Transaction):
 		self.transactions.append(transaction)
 		self.flags = 0x11
 
@@ -160,11 +163,11 @@ class indieChain(object):
 				return 'Block: Invalid type'
 			if self.blocks == []:
 				block.height = 0
-				print '<Genesis Block>'
+				print('<Genesis Block>')
 			return (head.hash == block.header.previous_hash)
 
 		if validateBlock(block):
-			self.blocks.append({'block': block, 'id': block.hash})
+			self.blocks.append(block)
 			for transaction in block.transactions:
 				self.transactions.append(transaction)
 
@@ -179,9 +182,9 @@ class indieChain(object):
 		except AssertionError:
 			return 'Genesis Block: Invalid type'
 		genesisBlock.header.height = 0
-		self.blocks.append({'block': block, 'id': block.hash})
+		self.blocks.append(block)
 
 	def getBlock(id):
 		for block in self.blocks:
-			if block.id == id:
+			if block.hash == id:
 				return block

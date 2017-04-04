@@ -1,7 +1,7 @@
-import network
-import dataStorage
-from core.merkle import *
-from core.utils import *
+# import network
+# import dataStorage
+# from core.merkle import *
+from utils import *
 
 from Crypto.PublicKey import RSA
 from time import time
@@ -15,7 +15,7 @@ class Wallet(object):
 		self.sender_endpoint = []
 		self.address = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
 		coinbaseTransaction = UTXO(self.address, self.address, initial_amount)
-		self.receiver_endpoint = [{'data': coinbaseTransaction, 'used': False}]
+		self.receiver_endpoint = [{'data': coinbaseTransaction, 'used': 0}]
 
 	def makePayment(self, receiver_address, amount):
 		utxo = UTXO(self.address, receiver_address, amount)
@@ -42,11 +42,12 @@ class Wallet(object):
 
 	def finalizeTransaction(self, utxos):
 		transaction = Transaction(utxos)
-		map(lambda u: u.transaction = transaction, utxos)
+		map(lambda u: u.transaction == transaction, utxos)
+		outgoing_sum = sum(utxo.value for utxo in utxos)
 		signTransaction(transaction)
 		self.node.pushTransaction(transaction)
 
-	def receiveUTXO(self, utxo)
+	def receiveUTXO(self, utxo):
 		self.receiver_endpoint.append({'data': utxo, 'used': False})
 
 	@classmethod
