@@ -2,6 +2,7 @@
 # import dataStorage
 # from core.merkle import *
 from utils import *
+from functools import reduce
 
 from Crypto.PublicKey import RSA
 from time import time
@@ -19,31 +20,36 @@ class Wallet(object):
 
 	def makePayment(self, receiver_address, amount):
 		utxo = UTXO(self.address, receiver_address, amount)
-		self_inputs = filter(lambda u: u['used'] is False, self.receiver_endpoint)
-		larger_input = filter(lambda u: u['data'].amount >= amount ,self_inputs)
-		if larger_input:
-			larger_input[0]['used'] = True
-			utxo.inputs.append(larger_input[0]['data'])
-		else:
-			timestamp_sorted_inputs = sort(self_inputs, key=lambda u: u['data'].timestamp)
-			iterator_sum = 0
-			for received_inputs in timestamp_sorted_inputs:
-				if iterator_sum + received_inputs['data'].amount <= amount:
-					iterator_sum += received_inputs['data'].amount
-					received_inputs['used'] = True
-					utxo.inputs.append(received_inputs['data'])
-				else:
-					break
-		if not utxo.inputs:
-			raise TransactionError("Cannot make the required transaction, due to insufficient balance.")
-		#destination = network.getWallet(receiver_address)
-		#destination.receiveUTXO(utxo)
 		self.sender_endpoint.append(utxo)
 
 	def finalizeTransaction(self, utxos):
 		transaction = Transaction(utxos)
-		map(lambda u: u.transaction == transaction, utxos)
+		for utxo in utxos:
+			utxo.transaction = transaction
 		outgoing_sum = sum(utxo.value for utxo in utxos)
+		self_inputs = filter(lambda u: u['used'] is False, self.receiver_endpoint)
+		larger_input = filter(lambda u: u['data'].value >= outgoing_sum ,self_inputs)
+		if larger_input:
+			larger_input = sort(larger_input, key = lambda u: u['data'].value)
+			larger_input[0]['used'] = True
+			transaction.inputs.append(larger_input[0]['data'])
+			transaction.reward = larger_input[0]['data'].value - outgoing_sum
+		else:
+			timestamp_sorted_inputs = sort(self_inputs, key=lambda u: u['data'].timestamp)
+			iterator_sum = 0
+			transaction.reward = 0
+			for received_inputs in timestamp_sorted_inputs:
+				if iterator_sum + received_inputs['data'].value <= outgoing_sum:
+					iterator_sum += received_inputs['data'].value
+					received_inputs['used'] = True
+					transaction.inputs.append(received_inputs['data'])
+					transaction.reward += received_inputs[0]['data'].value - outgoing_sum
+				else:
+					break
+		if not transaction.inputs:
+			raise TransactionError("Cannot make the required transaction, due to insufficient balance.")
+		#destination = network.getWallet(receiver_address)
+		#destination.receiveUTXO(utxo)
 		signTransaction(transaction)
 		self.node.pushTransaction(transaction)
 
@@ -80,7 +86,7 @@ class Node(object):
 
 	def signBlock(self, block):
 		block.signature = self._key.sign(block.hash, None)
-		block.node = self
+		block.node = self.id
 
 	def createBlock(self, threshold = 4):
 		self.current_block = Block(self.chain, threshold)
@@ -95,11 +101,22 @@ class Node(object):
 			self.signBlock(block)
 			peer_miner = network.getMiner()
 			try:
-				peer_miner.addBlock(block, block.chain)
+				nonce = peer_miner.addBlock(block)
+				block.nonce = nonce
 				self.chain.push(block)
 			except TransactionError:
 				correct, faulty = peer_miner.analyseBlock(block, block.chain)
 				self.pool += correct
+			except PreviousHeadError:
+				fork_height = peer_miner.getForkId(block)
+				pooled_blocks = filter(lambda u: u.header.height > fork_height, chain.blocks)
+				self.pool += [pooled_block.transactions for pooled_block in pooled_blocks]
+				i = 1
+				while True:
+					miner_block = peer_miner.getBlockByHeight(fork_height+i)
+					
+					pass
+
 		except AssertionError:
 			raise TypeError("Incorrect data instance")
 
@@ -125,10 +142,10 @@ class Node(object):
 class Miner(Node):
 	ROLE = 'M'
 
-	def addBlock(block, chain):
-		assert(isinstance(chain, indieChain))
+	def addBlock(self, block):
 		assert(isinstance(block, Block))
-		signerPublicKey = block.node.getPublicKey()
+		chain = self.chain
+		signerPublicKey = network.getNodePublicKey(block.node)
 		assert(signerPublicKey.verify(str(block), block.signature))
 		for transaction in block.transactions:
 			if transaction in chain.transactions:
@@ -158,10 +175,6 @@ class Miner(Node):
 			assert(isinstance(transaction, Transaction))
 		except:
 			raise TypeError("Transaction not of valid data type")
-		# try:
-		# 	assert(merkleVerify(transaction))
-		# except:
-		# 	raise ValidityError("Merkle Tree: Transaction route doesn't exist in block")		
 		signer = network.getNodePublicKey(transaction.sender) #get pubkey given wallet address
 		try:
 			assert(signer.verify(str(transaction), transaction.signature))

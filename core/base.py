@@ -70,14 +70,8 @@ class BlockHeader(object):
 		self.size = 0
 	
 	def save(self, nonce, size):
-		self.merkle_root = getMerkleRoot(self)
 		self._nonce = nonce
 		self.size = size
-
-	def getMerkleRoot(self):
-		block = self.block
-		ids = [transaction.id for transaction in block.transactions]
-		pass
 	
 	@property
 	def nonce(self):
@@ -86,16 +80,6 @@ class BlockHeader(object):
 	def nonce(self, value):
 		raise TypeError("Immutable data")
 	
-	@property
-	def merkle_root(self):
-		return self._merkle_root
-	@merkle_root.setter
-	def merkle_root(self, value):
-		if value == getMerkleRoot(self):
-			self._merkle_root = value
-		else:
-			raise TypeError("Immutable data")
-
 	def __repr__(self):
 		return "<%s> Header of Block %s" %(self.timestamp, self.block.height)
 

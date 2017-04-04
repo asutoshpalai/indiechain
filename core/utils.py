@@ -3,3 +3,6 @@ class TransactionError(Exception):
 
 class ValidityError(Exception):
 	pass
+
+class PreviousHeadError(Exception):
+	pass
