@@ -18,15 +18,17 @@ def ip2int(addr):
 def int2ip(addr):
     return inet_ntoa(pack("!I", addr))
 
-def receive_hi(socket):
-    data = socket.recv(MSG_HI_LENGTH)
+async def receive_hi(socket, loop):
+    data = await loop.sock_recv(socket, MSG_HI_LENGTH)
     hi = unpack(MSG_HI_FMT, data)
-    return hi[1:] # remove the msg type
+    return hi[2:] # remove the start and the msg type
 
-def send_hi(socket, proto_v, ip, port, id):
-    data = pack(MSG_HI_FMT, MSG_HI, proto_v, ip, port, id)
-    return socket.send(data)
+async def send_hi(socket, proto_v, ip, port, id, loop):
+    data = pack(MSG_HI_FMT, START_STRING, MSG_HI, proto_v, ip, port, id)
+    return await loop.sock_sendall(socket, data)
+
+def get_headers_msg(known_header):
+    return pack(MSG_GET_HEADER_FMT, START_STRING, MGS_GET_HEADER, known_header)
 
 def generate_id():
     return random.getrandbits(64)
-
