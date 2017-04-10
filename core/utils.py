@@ -4,5 +4,5 @@ class TransactionError(Exception):
 class ValidityError(Exception):
 	pass
 
-class PreviousHeadError(Exception):
+class UnmatchedHeadError(Exception):
 	pass

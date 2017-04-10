@@ -2,8 +2,10 @@
 # import dataStorage
 # from core.merkle import *
 from utils import *
-from functools import reduce
+from base import *
 
+from functools import reduce
+import random, string
 from Crypto.PublicKey import RSA
 from time import time
 
@@ -12,7 +14,7 @@ class Wallet(object):
 	def __init__(self, node, initial_amount):
 		assert(isinstance(node, Node))
 		self.node = node
-		self.publicKey = node.getPublicKey()
+		self.publicKey = node.getNodePublicKey()
 		self.sender_endpoint = []
 		self.address = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
 		coinbaseTransaction = UTXO(self.address, self.address, initial_amount)
@@ -20,119 +22,146 @@ class Wallet(object):
 
 	def makePayment(self, receiver_address, amount):
 		utxo = UTXO(self.address, receiver_address, amount)
-		self.sender_endpoint.append(utxo)
+		return utxo
+
+	def getBalance(self):
+		incoming_amount = sum(receiver['data'].value for receiver in self.receiver_endpoint)
+		outgoing_amount = sum(sender['amount'] for sender in self.sender_endpoint)
+		return incoming_amount - outgoing_amount
 
 	def finalizeTransaction(self, utxos):
+		def balance(utxo):
+			return utxo['data'].value - utxo['used']
+		
 		transaction = Transaction(utxos)
+		receiver_endpoint_copy = self.receiver_endpoint
+		sender_endpoint_copy = self.sender_endpoint
 		for utxo in utxos:
 			utxo.transaction = transaction
 		outgoing_sum = sum(utxo.value for utxo in utxos)
-		self_inputs = filter(lambda u: u['used'] is False, self.receiver_endpoint)
-		larger_input = filter(lambda u: u['data'].value >= outgoing_sum ,self_inputs)
+		self_inputs = filter(lambda u: balance(u) > 0, self.receiver_endpoint)
+		self_inputs.sort(key = lambda u: balance(u))
+		print self_inputs
+		larger_input = filter(lambda u: balance(u) >= outgoing_sum ,self_inputs)
 		if larger_input:
-			larger_input = sort(larger_input, key = lambda u: u['data'].value)
-			larger_input[0]['used'] = True
-			transaction.inputs.append(larger_input[0]['data'])
-			transaction.reward = larger_input[0]['data'].value - outgoing_sum
+			larger_input[0]['used'] += outgoing_sum
+			transaction.inputs.append(larger_input)
 		else:
-			timestamp_sorted_inputs = sort(self_inputs, key=lambda u: u['data'].timestamp)
 			iterator_sum = 0
-			transaction.reward = 0
-			for received_inputs in timestamp_sorted_inputs:
-				if iterator_sum + received_inputs['data'].value <= outgoing_sum:
-					iterator_sum += received_inputs['data'].value
-					received_inputs['used'] = True
-					transaction.inputs.append(received_inputs['data'])
-					transaction.reward += received_inputs[0]['data'].value - outgoing_sum
+			for received_inputs in self_inputs:
+				if iterator_sum + balance(received_inputs) <= outgoing_sum:
+					iterator_sum += balance(received_inputs)
+					received_inputs['used'] = received_inputs['data'].value
+					transaction.inputs.append(received_inputs)
 				else:
 					break
-		if not transaction.inputs:
-			raise TransactionError("Cannot make the required transaction, due to insufficient balance.")
+			if iterator_sum < outgoing_sum:
+				partial_balances = filter(lambda u: balance(u) > 0, self_inputs)
+				if partial_balances:
+					partial_balance = partial_balances[0]
+					partial_balance['used'] += outgoing_sum - iterator_sum
+					transaction.inputs.append(partial_balance)
+					iterator_sum = outgoing_sum
+			if iterator_sum < outgoing_sum:
+				self.receiver_endpoint = receiver_endpoint_copy
+				self.sender_endpoint = sender_endpoint_copy
+				del transaction
+				raise TransactionError("Cannot make the required transaction, due to insufficient balance.")
 		#destination = network.getWallet(receiver_address)
 		#destination.receiveUTXO(utxo)
-		signTransaction(transaction)
+		for utxo in utxos:
+			self.sender_endpoint.append({'data': utxo, 'amount': utxo.value})
+		self.signTransaction(transaction)
 		self.node.pushTransaction(transaction)
 
 	def receiveUTXO(self, utxo):
 		self.receiver_endpoint.append({'data': utxo, 'used': False})
 
-	@classmethod
-	def signTransaction(transaction):
+	def signTransaction(self, transaction):
 		assert(isinstance(transaction, Transaction))
 		transaction.signature = self.node._key.sign(str(transaction), None)
 
+	#for demonstration purposes only
+	def selfAdd(self, amount):
+		coinbaseTransaction = UTXO(self.address, self.address, amount)
+		self.receiver_endpoint += [{'data': coinbaseTransaction, 'used': 0}]
+
 class Node(object):
-	MAX_TX_LIMIT = 10
-	__slots__ = ['id', 'ROLE', 'chain', 'pool', '_key']
+	MAX_TX_LIMIT = 3
+	__slots__ = ['id', 'ROLE', 'chain', 'pool', '_key', 'current_block']
 	ROLE = 'N'
 
 	def __init__(self, chain):
-		self.id = network.getNetworkId()
+		# self.id = network.getNetworkId()
+		self.id = ''.join(random.choice(string.digits) for _ in range(3))
 		assert(isinstance(chain, indieChain))
 		self.chain = chain
 		self.pool = []
+		self.getNodePublicKey()
 
 	def getNodePublicKey(self):
-		write_key = open("../.indiechain/.rsa/private.pem",'r')
-		if write_key:
+		try:
+			write_key = open(".rsa/private.pem",'r')
 			key = RSA.importKey(write_key.read())
-		else:
+		except:
 			key = RSA.generate(2048)
-			write_key = open("../.config/.rsa/private.pem", 'w').write(key.exportKey())
-			write_key = open("../.config/.rsa/public.pem", 'w').write(key.publicKey().exportKey())
+			write_key = open(".rsa/private.pem", 'w').write(key.exportKey())
+			write_key = open(".rsa/public.pem", 'w').write(key.publickey().exportKey())
 		write_key.close()
 		self._key = key
-		return key.publicKey()
+		return key.publickey()
 
 	def signBlock(self, block):
 		block.signature = self._key.sign(block.hash, None)
 		block.node = self.id
 
-	def createBlock(self, threshold = 4):
-		self.current_block = Block(self.chain, threshold)
+	def createBlock(self):
+		self.current_block = Block(self.chain)
 		if self.pool != []:
 			for transaction in self.pool:
 				self.current_block.addTransaction(transaction)
 			self.pool = []
 
-	def addBlock(self, block):
+	def addBlock(self, *args):
+		block = self.current_block
+		self.signBlock(block)
+		peer_miners = network.getMiners()
 		try:
-			assert(isinstance(block, Block))
-			self.signBlock(block)
-			peer_miner = network.getMiner()
-			try:
-				nonce = peer_miner.addBlock(block)
-				block.nonce = nonce
-				self.chain.push(block)
-			except TransactionError:
-				correct, faulty = peer_miner.analyseBlock(block, block.chain)
-				self.pool += correct
-			except PreviousHeadError:
-				fork_height = peer_miner.getForkId(block)
-				pooled_blocks = filter(lambda u: u.header.height > fork_height, chain.blocks)
-				self.pool += [pooled_block.transactions for pooled_block in pooled_blocks]
-				i = 1
-				while True:
-					miner_block = peer_miner.getBlockByHeight(fork_height+i)
-					
-					pass
-
-		except AssertionError:
-			raise TypeError("Incorrect data instance")
+			nonce = [peer_miner.addBlock(block) for peer_miner in peer_miners]
+			if nonce.count(nonce[0]) != len(nonce):
+				raise ValidityError("Nonces not matched by miners.")
+			block.nonce = nonce[0]
+			self.chain.push(block)
+		except UnmatchedHeadError:
+			fork_height = peer_miner.getForkId(block)
+			pooled_blocks = filter(lambda u: u.header.height > fork_height, chain.blocks)
+			self.pool += [pooled_block.transactions for pooled_block in pooled_blocks]
+			i = 1
+			while True:
+				miner_block = peer_miner.getBlockByHeight(fork_height+i)
+				
+				pass
 
 	def pushTransaction(self, transaction):
-		self.current_block.addTransaction(transaction)
-		peers = network.getPeers()
-		for peer in peers:
-			peer.receiveTransaction(transaction)
+		try:
+			self.current_block.addTransaction(transaction)
+		except:
+			self.createBlock()
+			self.current_block.addTransaction(transaction)
+		# peers = network.getPeers()
+		# for peer in peers:
+		# 	peer.receiveTransaction(transaction)
 
 	#listening service
 	def receiveTransaction(self, transaction):
-		if transaction not in self.current_block.transactions:
-			self.current_block.addTransaction(transaction)
-		if len(self.current_block.transactions) > MAX_TX_LIMIT:
-			self.addBlock(self.current_block)
-			self.createBlock()
+		try:
+			if transaction not in self.current_block.transactions:
+				self.current_block.addTransaction(transaction)
+			if len(self.current_block.transactions) > MAX_TX_LIMIT:
+				self.addBlock(self.current_block)
+				self.createBlock()
+		except AttributeError:
+			self.pool.append(transaction)
 
 	def __repr__(self):
 		return '<%s> %s' % (self.ROLE, self.id)

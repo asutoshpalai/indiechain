@@ -4,38 +4,19 @@ from hashlib import sha256
 from functools import reduce
 
 class UTXO(object):
-	# __slots__ = ['id', 'transaction', 'sender', 'receiver', 'value', 'timestamp']
-	
 	def __init__(self, sender_address, receiver_address, amount):
-		try:
-			self.sender = sender_address
-			self.receiver = receiver_address
-		except:
-			raise ValidityError('Invalid addresses. Try again.')
+		self.sender = sender_address
+		self.receiver = receiver_address
 		self.value = amount
 		self.timestamp = time()
 		self.id = sha256((self.sender + self.receiver + str(self.timestamp)).encode('utf-8')).hexdigest()
 		self.transaction = None
 
-	# @property
-	# def sender(self):
-	# 	return self._sender
-	# @sender.setter
-	# def sender(self, value):
-	# 	raise TypeError("Immutable data")
-
-	# @property
-	# def receiver(self):
-	# 	return self._receiver
-	# @receiver.setter
-	# def receiver(self, value):
-	# 	raise TypeError("Immutable data")
-
 	def __repr__(self):
 		try:
 			return "<%s> * %s *" %(self.block, self.id[:10])
 		except:
-			return "%s" %(self.id)
+			return "%s" %(self.id[:10])
 
 class Transaction(object):
 	__slots__ = ['utxos', 'block', 'sender', 'signature', 'inputs']
@@ -48,15 +29,15 @@ class Transaction(object):
 		if self.utxos != []:
 			self.sender = utxos[0].sender
 			try:
-				assert(reduce(lambda x, y: x.sender == sender and y, self.utxos))
+				assert(reduce(lambda x, y: x.sender == self.sender and y, self.utxos))
 			except AssertionError:
 				raise ValidityError("UTXOs of a given transaction must have same sender.")
 
 	def __str__(self):
-		return ''.join(map(lambda u: str(u.id), self.utxos)) + str(self.sender.address)
+		return ''.join(map(lambda u: str(u.id), self.utxos)) + str(self.sender)
 
 	def __repr__(self):
-		return self.sender + ': ' + ''.join([utxo.id for utxo in self.utxos])
+		return self.sender + ': ' + ' '.join([utxo.id[:10] for utxo in self.utxos])
 
 class BlockHeader(object):
 	# __slots__ = ['previous_hash', 'merkle_root', 'timestamp', 'target_threshold', 'nonce', 'size', 'block']
@@ -66,7 +47,10 @@ class BlockHeader(object):
 		self.timestamp = time()
 		self.target_threshold = threshold
 		self.block = block
-		self.height = prev_block.header.height + 1
+		try:
+			self.height = prev_block.header.height + 1
+		except AttributeError:
+			self.height = 1
 		self.size = 0
 	
 	def save(self, nonce, size):
@@ -81,7 +65,7 @@ class BlockHeader(object):
 		raise TypeError("Immutable data")
 	
 	def __repr__(self):
-		return "<%s> Header of Block %s" %(self.timestamp, self.block.height)
+		return "<%s> Header of Block %s" %(self.timestamp, self.block.header.height)
 
 	def __str__(self):
 		return reduce(lambda x,y: x + '|' + y, [str(getattr(self, attr)) for attr in self.__slots__])
@@ -90,10 +74,6 @@ class Block(object):
 	__slots__ = ['header', 'transactions', 'flags', 'chain', 'threshold', 'hash', 'signature', 'miner', 'node']
 
 	def __init__(self, chain, threshold = 4):
-		try:
-			assert(threshold >= 4)
-		except AssertionError:
-			return ValidityError("Threshold must be GTE 4")
 		prev_block = chain.getHead()
 		if prev_block:
 			self.header = BlockHeader(prev_block,threshold, self)
@@ -110,28 +90,35 @@ class Block(object):
 		self.timestamp = time()
 		self.hash = sha256(sha256(str(self)).hexdigest()).hexdigest()
 
-	def addTransaction(Transaction):
+	def addTransaction(self, transaction):
 		self.transactions.append(transaction)
 		self.flags = 0x11
 
 	def __repr__(self):
 		try:
-			return "Block <%s>" %(self.height, self.hash)
+			return "Block <%s>" %(self.header.height, self.hash)
 		except:
-			return "Block %s" % self.height
+			return "Block %s" % self.header.height
 
 	def __str__(self):
 		return reduce(lambda x,y: x + '|' + y, [str(getattr(self, attr)) for attr in self.__slots__ if attr != 'hash'])
+
+class GenesisBlock(object):
+	def __init__(self):
+		self.timestamp = time()
+		self.height = 0
+		self.hash = sha256(str(self.timestamp)).hexdigest()
+		self.size = len(self.hash)
 
 class indieChain(object):
 	__slots__ = ['transactions', 'blocks']
 
 	def __init__(self):
-		self.blocks = []
+		self.blocks = [GenesisBlock()]
 		self.transactions = []
 
 	def getHead(self):
-		if blocks == []:
+		if self.blocks == []:
 			return None
 		else:
 			return self.blocks[-1]
@@ -139,15 +126,15 @@ class indieChain(object):
 	def push(self, block):
 		def validateBlock(block):
 			head = self.getHead()
-			try:
-				assert(isinstance(block, Block))
-				# assert(block.timestamp > head.timestamp)
-				assert(block.height > head.height)
-			except AssertionError:
-				return 'Block: Invalid type'
+			assert(isinstance(block, Block))
 			if self.blocks == []:
 				block.height = 0
 				print('<Genesis Block>')
+			else:	
+				try:
+					assert(block.height > head.height)
+				except AssertionError:
+					return 'Block: Invalid type'
 			return (head.hash == block.header.previous_hash)
 
 		if validateBlock(block):
@@ -172,3 +159,6 @@ class indieChain(object):
 		for block in self.blocks:
 			if block.hash == id:
 				return block
+
+	def __repr__(self):
+		return 'indieChain: ' + ' '.join([str(block.height) for block in self.blocks])
