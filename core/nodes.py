@@ -1,12 +1,14 @@
 # import network
 # import dataStorage
 # from core.merkle import *
-from utils import *
-from base import *
+from .utils import *
+from .base import *
 
 from functools import reduce
 import random, string
 from Crypto.PublicKey import RSA
+from Crypto.Hash import SHA256
+from Crypto.Signature import pkcs1_15
 from time import time
 
 class Wallet(object):
@@ -19,6 +21,7 @@ class Wallet(object):
 		self.address = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
 		coinbaseTransaction = UTXO(self.address, self.address, initial_amount)
 		self.receiver_endpoint = [{'data': coinbaseTransaction, 'used': 0}]
+		self.transactions = []
 
 	def makePayment(self, receiver_address, amount):
 		utxo = UTXO(self.address, receiver_address, amount)
@@ -39,10 +42,9 @@ class Wallet(object):
 		for utxo in utxos:
 			utxo.transaction = transaction
 		outgoing_sum = sum(utxo.value for utxo in utxos)
-		self_inputs = filter(lambda u: balance(u) > 0, self.receiver_endpoint)
+		self_inputs = list(filter(lambda u: balance(u) > 0, self.receiver_endpoint))
 		self_inputs.sort(key = lambda u: balance(u))
-		print self_inputs
-		larger_input = filter(lambda u: balance(u) >= outgoing_sum ,self_inputs)
+		larger_input = list(filter(lambda u: balance(u) >= outgoing_sum ,self_inputs))
 		if larger_input:
 			larger_input[0]['used'] += outgoing_sum
 			transaction.inputs.append(larger_input)
@@ -56,7 +58,7 @@ class Wallet(object):
 				else:
 					break
 			if iterator_sum < outgoing_sum:
-				partial_balances = filter(lambda u: balance(u) > 0, self_inputs)
+				partial_balances = list(filter(lambda u: balance(u) > 0, self_inputs))
 				if partial_balances:
 					partial_balance = partial_balances[0]
 					partial_balance['used'] += outgoing_sum - iterator_sum
@@ -72,6 +74,7 @@ class Wallet(object):
 		for utxo in utxos:
 			self.sender_endpoint.append({'data': utxo, 'amount': utxo.value})
 		self.signTransaction(transaction)
+		self.transactions.append(transaction)
 		self.node.pushTransaction(transaction)
 
 	def receiveUTXO(self, utxo):
@@ -79,16 +82,15 @@ class Wallet(object):
 
 	def signTransaction(self, transaction):
 		assert(isinstance(transaction, Transaction))
-		transaction.signature = self.node._key.sign(str(transaction), None)
-
+		transaction.signature = pkcs1_15.new(self.node._key).sign(SHA256.new(str(transaction).encode('utf-8')))
 	#for demonstration purposes only
 	def selfAdd(self, amount):
-		coinbaseTransaction = UTXO(self.address, self.address, amount)
-		self.receiver_endpoint += [{'data': coinbaseTransaction, 'used': 0}]
+		selfTransaction = UTXO(self.address, self.address, amount)
+		self.receiver_endpoint += [{'data': selfTransaction, 'used': 0}]
 
 class Node(object):
 	MAX_TX_LIMIT = 3
-	__slots__ = ['id', 'ROLE', 'chain', 'pool', '_key', 'current_block']
+	__slots__ = ['id', 'chain', 'pool', '_key', 'current_block']
 	ROLE = 'N'
 
 	def __init__(self, chain):
@@ -111,8 +113,8 @@ class Node(object):
 		self._key = key
 		return key.publickey()
 
-	def signBlock(self, block):
-		block.signature = self._key.sign(block.hash, None)
+	def signBlock(self, block):	
+		block.signature =  pkcs1_15.new(self._key).sign(SHA256.new(block.hash.encode('utf-8')))
 		block.node = self.id
 
 	def createBlock(self):

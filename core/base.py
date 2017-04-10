@@ -1,4 +1,4 @@
-from utils import *
+from .utils import *
 from time import time
 from hashlib import sha256
 from functools import reduce
@@ -88,7 +88,7 @@ class Block(object):
 		size = len(str(self.block))
 		self.header.save(nonce, size)
 		self.timestamp = time()
-		self.hash = sha256(sha256(str(self)).hexdigest()).hexdigest()
+		self.hash = sha256(sha256(str(self).encode('utf-8')).hexdigest().encode('utf-8')).hexdigest()
 
 	def addTransaction(self, transaction):
 		self.transactions.append(transaction)
@@ -107,7 +107,7 @@ class GenesisBlock(object):
 	def __init__(self):
 		self.timestamp = time()
 		self.height = 0
-		self.hash = sha256(str(self.timestamp)).hexdigest()
+		self.hash = sha256(str(self.timestamp).encode('utf-8')).hexdigest()
 		self.size = len(self.hash)
 
 class indieChain(object):
@@ -127,14 +127,10 @@ class indieChain(object):
 		def validateBlock(block):
 			head = self.getHead()
 			assert(isinstance(block, Block))
-			if self.blocks == []:
-				block.height = 0
-				print('<Genesis Block>')
-			else:	
-				try:
-					assert(block.height > head.height)
-				except AssertionError:
-					return 'Block: Invalid type'
+			try:
+				assert(block.height > head.height)
+			except AssertionError:
+				return 'Block: Invalid type'
 			return (head.hash == block.header.previous_hash)
 
 		if validateBlock(block):
