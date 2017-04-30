@@ -24,8 +24,8 @@ async def receive_hi(socket, loop):
     hi = unpack(MSG_HI_FMT, data)
     return hi[2:] # remove the start and the msg type
 
-async def send_hi(socket, proto_v, ip, port, id, loop):
-    data = pack(MSG_HI_FMT, START_STRING, MSG_HI, proto_v, ip, port, id)
+async def send_hi(socket, proto_v, role, ip, port, id, loop):
+    data = pack(MSG_HI_FMT, START_STRING, MSG_HI, proto_v, role, ip, port, id)
     return await loop.sock_sendall(socket, data)
 
 def get_headers_msg(known_header):

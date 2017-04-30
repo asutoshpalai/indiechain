@@ -56,38 +56,40 @@ class Manager():
     @coroutine
     def handle_conn(self, socket, addr):
         hi = yield from receive_hi(socket, self.loop)
-        proto_v, ip, port, peer_id = hi
+        proto_v, role, ip, port, peer_id = hi
 
         assert proto_v == PROTO_VERSION
 
-        yield from send_hi(socket, PROTO_VERSION, ip2int(self.ip), self.port, self.id, self.loop)
+        role = bytes(self.node.ROLE, 'ascii')
+        yield from send_hi(socket, PROTO_VERSION, role, ip2int(self.ip), self.port, self.id, self.loop)
 
         self.log.info("Peer {} successfully handshaked".format(peer_id))
 
-        peer = yield from self._add_peer(proto_v, int2ip(ip), port, peer_id, socket)
+        peer = yield from self._add_peer(proto_v, role, int2ip(ip), port, peer_id, socket)
         return peer
 
     @coroutine
     def connect_to_peer(self, host, port):
         soc = socket.create_connection((host, port))
         soc.setblocking(0)
-        yield from send_hi(soc, PROTO_VERSION, ip2int(self.ip), self.port, self.id, self.loop)
+        role = bytes(self.node.ROLE, 'ascii')
+        yield from send_hi(soc, PROTO_VERSION, role, ip2int(self.ip), self.port, self.id, self.loop)
         hi = yield from receive_hi(soc, self.loop)
 
-        proto_v, ip, port, peer_id = hi
+        proto_v, role, ip, port, peer_id = hi
 
         assert proto_v == PROTO_VERSION
 
         self.log.info("Peer {} successfully connected".format(peer_id))
-        peer = yield from self._add_peer(proto_v, int2ip(ip), port, peer_id, soc)
+        peer = yield from self._add_peer(proto_v, role, int2ip(ip), port, peer_id, soc)
         return peer
 
     @coroutine
-    def _add_peer(self, proto_v, ip, port, peer_id, sock):
+    def _add_peer(self, proto_v, role, ip, port, peer_id, sock):
         if peer_id in self.peers:
             peer = peers[peer_id]
         else:
-            peer = Peer(self, peer_id, proto_v, ip, port)
+            peer = Peer(self, peer_id, proto_v, role, ip, port)
             self.peers[peer_id] = Peer
         yield from peer.receive_conn(sock)
         return peer
@@ -102,4 +104,6 @@ class Manager():
         self.log.info("recevied transaction: " + repr(trx))
 
         if self.node:
-            node.receiveTransaction(trx)
+            self.node.receiveTransaction(trx)
+
+# vim: set expandtab:

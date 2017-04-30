@@ -7,12 +7,13 @@ from .helpers import control_message, trx_packet, deserialize_trx
 from .consts import *
 
 class Peer():
-    def __init__(self, manager, pid, proto_v, ip, port):
+    def __init__(self, manager, pid, proto_v, role, ip, port):
         self.manager = manager
         self.id = pid
         self.proto = proto_v
         self.ip = ip
         self.port = port
+        self.role = role
         self.log = logging.getLogger('Peer {} of {}'.format(self.id, manager.id))
 
     @asyncio.coroutine

@@ -6,8 +6,8 @@ START_STRING = 0x0b110907
 PROTO_VERSION = 0x00000001
 
 MSG_HI = 0x00000000
-# start string #MSG type # Proto version # IP Addr #port #id
-MSG_HI_FMT = ">IIIIHQ"
+# start string #MSG type # Proto version # Role # IP Addr #port #id
+MSG_HI_FMT = ">IIIcIHQ"
 MSG_HI_LENGTH = calcsize(MSG_HI_FMT)
 
 MSG_HEADER_FMT = ">II"
