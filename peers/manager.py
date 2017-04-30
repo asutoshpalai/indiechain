@@ -65,7 +65,7 @@ class Manager():
 
         self.log.info("Peer {} successfully handshaked".format(peer_id))
 
-        peer = yield from self._add_peer(proto_v, role, int2ip(ip), port, peer_id, socket)
+        peer = yield from self._add_peer(proto_v, role.decode('ascii'), int2ip(ip), port, peer_id, socket)
         return peer
 
     @coroutine
@@ -81,7 +81,7 @@ class Manager():
         assert proto_v == PROTO_VERSION
 
         self.log.info("Peer {} successfully connected".format(peer_id))
-        peer = yield from self._add_peer(proto_v, role, int2ip(ip), port, peer_id, soc)
+        peer = yield from self._add_peer(proto_v, role.decode('ascii'), int2ip(ip), port, peer_id, soc)
         return peer
 
     @coroutine
@@ -90,7 +90,7 @@ class Manager():
             peer = peers[peer_id]
         else:
             peer = Peer(self, peer_id, proto_v, role, ip, port)
-            self.peers[peer_id] = Peer
+            self.peers[peer_id] = peer
         yield from peer.receive_conn(sock)
         return peer
 
@@ -106,4 +106,30 @@ class Manager():
         if self.node:
             self.node.receiveTransaction(trx)
 
-# vim: set expandtab:
+    def receiveMinerBlock(self, block):
+        self.log.info("recevied miner block: " + repr(block))
+
+        if self.node:
+            self.node.evaluateBlock(block)
+
+    def receiveBlock(self, block):
+        self.log.info("recevied block: " + repr(block))
+
+        if self.node:
+            self.node.receiveBlock(block)
+
+    def broadcastToMiners(self, block):
+        print("*" * 40)
+        self.log.info("broadcasting block to miners: " + repr(block))
+        [peer.sendMinerBlock(block) for id, peer in self.peers.items() if peer.role == 'M']
+
+    # send block to peers
+    def transmitToPeers(self, block):
+        self.log.info("broadcasting block to peers: " + repr(block))
+        [peer.sendBlock(block) for id, peer in self.peers.items()]
+
+    # send transaction to peers
+    def broadcastToPeers(self, trx):
+        [peer.sendTransaction(trx) for id, peer in self.peers.items()]
+
+# ex: set tabstop=4 shiftwidth=4  expandtab:

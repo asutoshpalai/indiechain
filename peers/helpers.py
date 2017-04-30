@@ -34,19 +34,35 @@ def get_headers_msg(known_header):
 def generate_id():
     return random.getrandbits(64)
 
-def serialize_transaction(transaction):
-    pick = pickle.dumps(transaction)
-    return pack(TRX_HEADER_FMT, TRX_HEADER, len(pick)) + pick
+def pickle_serialize(header_fmt, obj_code, obj):
+    pick = pickle.dumps(obj)
+    return pack(header_fmt, obj_code, len(pick)) + pick
 
 def trx_packet(transaction):
-    trx = serialize_transaction(transaction)
-    return pack(">I", START_STRING) + trx
+    return pack(">I", START_STRING) + pickle_serialize(TRX_HEADER_FMT, TRX_HEADER, transaction)
 
-def deserialize_trx(data):
-    header = data[:TRX_HEADER_LENGTH]
-    body = data[TRX_HEADER_LENGTH:]
-    h_type, l = unpack(TRX_HEADER_FMT, header)
-    assert h_type == TRX_HEADER
+def miner_block_packet(block):
+    return pack(">I", START_STRING) + pickle_serialize(MBLK_HEADER_FMT, MBLK_HEADER, block)
+
+def block_packet(block):
+    return pack(">I", START_STRING) + pickle_serialize(BLK_HEADER_FMT, BLK_HEADER, block)
+
+def deserialize_pickle(data, obj_type, header_len, header_fmt):
+    header = data[:header_len]
+    body = data[header_len:]
+    h_type, l = unpack(header_fmt, header)
+    assert h_type == obj_type
     assert len(body) == l
 
     return pickle.loads(body)
+
+def deserialize_block(data):
+    return deserialize_pickle(data, BLK_HEADER, BLK_HEADER_LENGTH, BLK_HEADER_FMT)
+
+def deserialize_miner_block(data):
+    return deserialize_pickle(data, MBLK_HEADER, MBLK_HEADER_LENGTH, MBLK_HEADER_FMT)
+
+def deserialize_trx(data):
+    return deserialize_pickle(data, TRX_HEADER, TRX_HEADER_LENGTH, TRX_HEADER_FMT)
+
+# ex: set tabstop=4 shiftwidth=4  expandtab:

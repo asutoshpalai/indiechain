@@ -3,7 +3,7 @@ import asyncio
 import logging
 from struct import pack, unpack
 
-from .helpers import control_message, trx_packet, deserialize_trx
+from .helpers import *
 from .consts import *
 
 class Peer():
@@ -59,8 +59,12 @@ class Peer():
     def data_received(self, typ, data):
         if typ == TRX_HEADER:
             self.handleTransaction(data)
+        elif typ == MBLK_HEADER:
+            self.handleMinerBlock(data)
+        elif typ == BLK_HEADER:
+            self.handleBlock(data)
         else:
-            self.log.error("Unknown data type: " + str(typ))
+            self.log.error("Unknown data type: " + hex(typ))
 
     def sync_meta(self):
         with socket.create_connection((self.ip, self.port)) as s:
@@ -78,13 +82,37 @@ class Peer():
         else:
             loop.run_until_complete(self.send_raw_data_aysnc(data))
 
-    def receiveTransaction(self, transaction):
+    def sendTransaction(self, transaction):
         """
         called by node on the same system to send the trx to the peer
         """
         trx = trx_packet(transaction)
         self.send_data(trx)
 
+    def sendMinerBlock(self, block):
+        """
+        called by manager on the same system to send the block to the miners
+        """
+        blk = miner_block_packet(block)
+        self.send_data(blk)
+
+    def sendBlock(self, block):
+        """
+        called by manager on the same system to send the block to the peer
+        """
+        blk = block_packet(block)
+        self.send_data(blk)
+
+    def handleMinerBlock(self, data):
+        block = deserialize_miner_block(data)
+        self.manager.receiveMinerBlock(block)
+
+    def handleBlock(self, data):
+        block = deserialize_block(data)
+        self.manager.receiveBlock(block)
+
     def handleTransaction(self, data):
         trx = deserialize_trx(data)
         self.manager.receiveTransaction(trx)
+
+# ex: set tabstop=4 shiftwidth=4  expandtab:
