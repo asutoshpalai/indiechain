@@ -6,3 +6,6 @@ class ValidityError(Exception):
 
 class UnmatchedHeadError(Exception):
 	pass
+
+class MiningError(Exception):
+	pass

@@ -27,11 +27,6 @@ class Wallet(object):
 		utxo = UTXO(self.address, receiver_address, amount)
 		return utxo
 
-	def getBalance(self):
-		incoming_amount = sum(receiver['data'].value for receiver in self.receiver_endpoint)
-		outgoing_amount = sum(sender['amount'] for sender in self.sender_endpoint)
-		return incoming_amount - outgoing_amount
-
 	def finalizeTransaction(self, utxos):
 		def balance(utxo):
 			return utxo['data'].value - utxo['used']
@@ -77,19 +72,21 @@ class Wallet(object):
 		self.transactions.append(transaction)
 		self.node.pushTransaction(transaction)
 
-	def receiveUTXO(self, utxo):
-		self.receiver_endpoint.append({'data': utxo, 'used': False})
-
 	def signTransaction(self, transaction):
 		assert(isinstance(transaction, Transaction))
 		transaction.signature = pkcs1_15.new(self.node._key).sign(SHA256.new(str(transaction).encode('utf-8')))
+
+	#listening service on each wallet
+	def receiveUTXO(self, utxo):
+		self.receiver_endpoint.append({'data': utxo, 'used': False})
+	
 	#for demonstration purposes only
 	def selfAdd(self, amount):
 		selfTransaction = UTXO(self.address, self.address, amount)
 		self.receiver_endpoint += [{'data': selfTransaction, 'used': 0}]
 
 class Node(object):
-	MAX_TX_LIMIT = 3
+	MAX_TX_LIMIT = 5
 	__slots__ = ['id', 'chain', 'pool', '_key', 'current_block']
 	ROLE = 'N'
 
@@ -124,96 +121,140 @@ class Node(object):
 				self.current_block.addTransaction(transaction)
 			self.pool = []
 
-	def addBlock(self, *args):
+	def addBlock(self):
 		block = self.current_block
 		self.signBlock(block)
-		peer_miners = network.getMiners()
-		try:
-			nonce = [peer_miner.addBlock(block) for peer_miner in peer_miners]
-			if nonce.count(nonce[0]) != len(nonce):
-				raise ValidityError("Nonces not matched by miners.")
-			block.nonce = nonce[0]
-			self.chain.push(block)
-		except UnmatchedHeadError:
-			fork_height = peer_miner.getForkId(block)
-			pooled_blocks = filter(lambda u: u.header.height > fork_height, chain.blocks)
-			self.pool += [pooled_block.transactions for pooled_block in pooled_blocks]
-			i = 1
-			while True:
-				miner_block = peer_miner.getBlockByHeight(fork_height+i)
-				
-				pass
+		#transmit block to peers
+		network.broadcastToMiners(block)
+		#list of response received from Miners. In case block is correct, response is (MinerID, Nonce). In case of Fork, 
+		#(MinerID, [<blocks>]]) is received & if invalid, (MinerID, 'INVALID') is the response.  
+		#responseFromMiners must execute evaluateBlock() on miners which yields the value
+		responses = network.responseFromMiners()
+		responses = dict(response)
+
+		if 'INVALID' in responses.values():
+			self.current_block = None
+			raise ValidityError("Block terminated due to invalidation from Miner")
+		
+		temp_nonce = None
+		for value in responses.values():
+			if isinstace(value, int):
+				temp_nonce = value
+				break
+		if all(value == temp_nonce for value in responses.values()):
+			block.save(temp_nonce)
+			network.TransmitToPeers(block)
+			#executes receiveBlock on all peers
+		else:
+			lagBlocks = []
+			for key, value in responses.items():
+				if isinstace(value, list):
+					lagBlocks += value
+			lagBlocks = list(set(lagBlocks))
+			# lagHead = filter(lambda u: ,lagBlocks)
+			#push the blocks correctly and update current_block.header.prev_hash
+
 
 	def pushTransaction(self, transaction):
 		try:
 			self.current_block.addTransaction(transaction)
+			if len(self.current_block.transactions) >= MAX_TX_LIMIT:
+				self.addBlock()
 		except:
 			self.createBlock()
 			self.current_block.addTransaction(transaction)
-		# peers = network.getPeers()
-		# for peer in peers:
-		# 	peer.receiveTransaction(transaction)
+		## peers = network.getPeers()
+		## or get network layer to do it
+		## for peer in peers:
+		## 	peer.receiveTransaction(transaction)
+		network.broadcastToPeers(transaction)
+		# **CORRECT-> broadcast the transaction block to all it peers in Network Layer**
 
-	#listening service
+	#listening service for transaction
 	def receiveTransaction(self, transaction):
 		try:
-			if transaction not in self.current_block.transactions:
+			if transaction not in self.chain.transactions:
 				self.current_block.addTransaction(transaction)
 			if len(self.current_block.transactions) > MAX_TX_LIMIT:
-				self.addBlock(self.current_block)
+				self.addBlock()
 				self.createBlock()
 		except AttributeError:
 			self.pool.append(transaction)
+
+	#listening service for block 
+	def receiveBlock(self, block):
+		if self.ROLE == 'M':
+			if self.anayseBlock(block):
+				self.addBlock(block)
+		elif block not in self.chain.blocks:
+			if self.current_block:
+				self.chain.push(block)
+				current_block.header.prev_hash = block.hash
+				current_block.header.height = block.height + 1
+			network.TransmitToPeers(block)
+			#executes receiveBlock on all peers
 
 	def __repr__(self):
 		return '<%s> %s' % (self.ROLE, self.id)
 
 
-
+#current version of code expects the miner to be live throughout. Thereby implying persistance among miners
 class Miner(Node):
 	ROLE = 'M'
 
-	def addBlock(self, block):
+	#listening service corresponding to getForkedBlocks
+	def evaluateBlock(self, block):
 		assert(isinstance(block, Block))
-		chain = self.chain
-		signerPublicKey = network.getNodePublicKey(block.node)
-		assert(signerPublicKey.verify(str(block), block.signature))
-		for transaction in block.transactions:
-			if transaction in chain.transactions:
-				return
-		if reduce(lambda x, y: x and y, map(verifyTransaction, block.transactions)):
+		if not block.nonce:
+			for transaction in block.transactions:
+				if transaction in self.chain.transactions:
+					return 'INVALID'
+
+			signerPublicKey = network.getNodePublicKey(block.node)
 			try:
-				# assert(block.nonce[:block.threshold] == '0'*block.threshold)
-				assert(consesus(chain, block))
-			except AssertionError:
-				for transaction in block.transactions:
-					self.pool.append(transaction)
-				raise ValidityError("Invalid block.")
-			block.miner = self
-			block.signature = self.getNodeSignature(block)
-			if block.flags == 0x11: 
-				for transaction in block.transactions:
-					block.coinbaseTransaction(transaction, self.wallet.address)
-			block.save(mine(block))
-			chain.push(block)
-			return 'Successfully appended to the blockchain'
-		else:	
-			raise TransactionError("Invalid transaction(s). Recheck Block.")
+				signerPublicKey.verify(SHA256.new(block.hash.encode('utf-8')), block.signature)
+			except (ValueError, TypeError):
+				return 'Incorrect Signature'
+
+			if block.flags == 0x11:
+				if not reduce(lambda x, y: x and y, map(verifyTransaction, block.transactions)):
+					return 'INVALID'
+
+		local_parent = filter(lambda u: u.header.height == block.header.height - 1, self.chain.blocks)[0]
+		#Miner contains uptill the parent of the block. Hence no fork. simply add the block 
+		if local_parent.height == len(self.chain.blocks):
+			#generateNonce calculates the nonce and returns the nonce value
+			return generateNonce(block)
+		
+		elif local_parent.hash == block.header.prev_hash:
+			fork_height = block.header.height - 1
+			excess_blocks = filter(lambda u: u.header.height > fork_height, self.chain.blocks)
+			#this generates the response to FORK condition
+			return excess_blocks
+		else:
+			prev_block = network.getBlock(block.node, block.header.prev_hash)
+			return self.evaluateBlock(prev_block)
+
+	@classmethod
+	def generateNonce(block):
+		temp_block = block
+		for i in range(5*10**6):
+			temp_block.header.nonce = i
+			if sha256(str(temp_block).encode('utf-8')).hexdigest()[:block.threshold] == '0'*block.threshold:
+				return i
+		raise MiningError("Unable to mine block within the constraints.")
+
+	def addBlock(self, block):
+		block.miner = self.id
+		chain.push(block)
+		return 'Successfully appended to the blockchain'
 			
 	@classmethod
 	def verifyTransaction(transaction):
+		signerPublicKey = network.getNodePublicKey(wallet_address = transaction.error)
+		#returns publickey of node associated with the wallet address
 		try:
-			assert(isinstance(transaction, Transaction))
-		except:
-			raise TypeError("Transaction not of valid data type")
-		signer = network.getNodePublicKey(transaction.sender) #get pubkey given wallet address
-		try:
-			assert(signer.verify(str(transaction), transaction.signature))
-		except AssertionError:
-				raise TransactionError(str(transaction) + ": Unauthorized transaction")
-		return True
-
-	@classmethod
-	def consesus(chain, block):
-		miner_peers = network.getMiner()
-		miner_peers
+			signerPublicKey.verify(SHA256.new(str(transaction).encode('utf-8')), transaction.signature)
+			return True
+		except (ValueError, TypeError):
+			return False
