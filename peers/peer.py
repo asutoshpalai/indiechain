@@ -22,6 +22,9 @@ class Peer():
         self.log.debug("Connection created")
         self._add_sock_cb()
 
+    def getPublicKey(self):
+        return self._key
+
     def _add_sock_cb(self):
         loop = self.manager.loop
         loop.add_reader(self.socket.fileno(), self._data_cb)
@@ -63,6 +66,8 @@ class Peer():
             self.handleMinerBlock(data)
         elif typ == BLK_HEADER:
             self.handleBlock(data)
+        elif typ == PKEY_HEADER:
+            self.receiveKey(data)
         else:
             self.log.error("Unknown data type: " + hex(typ))
 
@@ -103,6 +108,13 @@ class Peer():
         blk = block_packet(block)
         self.send_data(blk)
 
+    @asyncio.coroutine
+    def sendPublicKey(self):
+        loop = self.manager.loop
+        key = self.manager.node.getNodePublicKey()
+        key = public_key_packet(key)
+        self.send_data(key)
+
     def handleMinerBlock(self, data):
         block = deserialize_miner_block(data)
         self.manager.receiveMinerBlock(block)
@@ -114,5 +126,10 @@ class Peer():
     def handleTransaction(self, data):
         trx = deserialize_trx(data)
         self.manager.receiveTransaction(trx)
+
+    def receiveKey(self, data):
+        self.log.debug("Received the public key")
+        key = deserialize_public_key(data)
+        self._key = key
 
 # ex: set tabstop=4 shiftwidth=4  expandtab:

@@ -90,6 +90,7 @@ class Manager():
             peer = peers[peer_id]
         else:
             peer = Peer(self, peer_id, proto_v, role, ip, port)
+            asyncio.ensure_future(peer.sendPublicKey(), loop=self.loop)
             self.peers[peer_id] = peer
         yield from peer.receive_conn(sock)
         return peer
@@ -131,5 +132,8 @@ class Manager():
     # send transaction to peers
     def broadcastToPeers(self, trx):
         [peer.sendTransaction(trx) for id, peer in self.peers.items()]
+
+    def getNodePublicKey(self, id):
+        return peers[id].getPublicKey()
 
 # ex: set tabstop=4 shiftwidth=4  expandtab:

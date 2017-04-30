@@ -47,6 +47,9 @@ def miner_block_packet(block):
 def block_packet(block):
     return pack(">I", START_STRING) + pickle_serialize(BLK_HEADER_FMT, BLK_HEADER, block)
 
+def public_key_packet(key):
+    return pack(">I", START_STRING) + pickle_serialize(PKEY_HEADER_FMT, PKEY_HEADER, key)
+
 def deserialize_pickle(data, obj_type, header_len, header_fmt):
     header = data[:header_len]
     body = data[header_len:]
@@ -64,5 +67,8 @@ def deserialize_miner_block(data):
 
 def deserialize_trx(data):
     return deserialize_pickle(data, TRX_HEADER, TRX_HEADER_LENGTH, TRX_HEADER_FMT)
+
+def deserialize_public_key(data):
+    return deserialize_pickle(data, PKEY_HEADER, PKEY_HEADER_LENGTH, PKEY_HEADER_FMT)
 
 # ex: set tabstop=4 shiftwidth=4  expandtab:
