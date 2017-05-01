@@ -4,8 +4,5 @@ class TransactionError(Exception):
 class ValidityError(Exception):
 	pass
 
-class UnmatchedHeadError(Exception):
-	pass
-
 class MiningError(Exception):
 	pass

@@ -1,9 +1,6 @@
 from core.nodes import *
 from core.base import *
 
-# u = [UTXO('a', 'b', 100), UTXO('a', 'c', 500)]
-
-# t = Transaction(u)
 ic = indieChain()
 b = Block(ic)
 
@@ -19,3 +16,36 @@ W.selfAdd(500)
 print('paying 900 to d')
 W.finalizeTransaction([W.makePayment('d', 900)])
 
+print('third transaction')
+W.finalizeTransaction([W.makePayment('d', 200)])
+N.addBlock()
+#2
+W.finalizeTransaction([W.makePayment('d', 2)])
+N.addBlock()
+#3
+W.finalizeTransaction([W.makePayment('d', 2)])
+N.addBlock()
+#4
+W.finalizeTransaction([W.makePayment('d', 2)])
+N.addBlock()
+#5
+W.finalizeTransaction([W.makePayment('d', 2)])
+N.addBlock()
+#6
+W.finalizeTransaction([W.makePayment('d', 2)])
+N.addBlock()
+#7
+W.finalizeTransaction([W.makePayment('d', 2)])
+N.addBlock()
+#8
+W.finalizeTransaction([W.makePayment('d', 2)])
+N.addBlock()
+#9
+W.finalizeTransaction([W.makePayment('d', 2)])
+N.addBlock()
+#10
+W.finalizeTransaction([W.makePayment('d', 2)])
+N.addBlock()
+#11
+W.finalizeTransaction([W.makePayment('d', 2)])
+N.addBlock()

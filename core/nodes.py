@@ -1,6 +1,4 @@
-# import network
-# import dataStorage
-# from core.merkle import *
+#import network
 from .utils import *
 from .base import *
 
@@ -26,6 +24,11 @@ class Wallet(object):
 	def makePayment(self, receiver_address, amount):
 		utxo = UTXO(self.address, receiver_address, amount)
 		return utxo
+
+	def getBalance(self):
+		incoming_amount = sum(receiver['data'].value for receiver in self.receiver_endpoint)
+		outgoing_amount = sum(sender['amount'] for sender in self.sender_endpoint)
+		return incoming_amount - outgoing_amount
 
 	def finalizeTransaction(self, utxos):
 		def balance(utxo):
@@ -64,8 +67,8 @@ class Wallet(object):
 				self.sender_endpoint = sender_endpoint_copy
 				del transaction
 				raise TransactionError("Cannot make the required transaction, due to insufficient balance.")
-		#destination = network.getWallet(receiver_address)
-		#destination.receiveUTXO(utxo)
+		#network.receiveUTXO(receiver_address, utxo)
+		#should execute receiveUTXO on receiver
 		for utxo in utxos:
 			self.sender_endpoint.append({'data': utxo, 'amount': utxo.value})
 		self.signTransaction(transaction)
@@ -97,6 +100,7 @@ class Node(object):
 		self.chain = chain
 		self.pool = []
 		self.getNodePublicKey()
+		self.createBlock()
 
 	def getNodePublicKey(self):
 		try:
@@ -111,7 +115,11 @@ class Node(object):
 		return key.publickey()
 
 	def signBlock(self, block):	
-		block.signature =  pkcs1_15.new(self._key).sign(SHA256.new(block.hash.encode('utf-8')))
+		try:	
+			block.signature =  pkcs1_15.new(self._key).sign(SHA256.new(block.hash.encode('utf-8')))
+		except:
+			block.hash = sha256(str(self).encode('utf-8')).hexdigest()
+			block.signature =  pkcs1_15.new(self._key).sign(SHA256.new(block.hash.encode('utf-8')))
 		block.node = self.id
 
 	def createBlock(self):
@@ -125,40 +133,63 @@ class Node(object):
 		block = self.current_block
 		self.signBlock(block)
 		#transmit block to peers
-		network.broadcastToMiners(block)
+	###	network.broadcastToMiners(block)
 		#list of response received from Miners. In case block is correct, response is (MinerID, Nonce). In case of Fork, 
 		#(MinerID, [<blocks>]]) is received & if invalid, (MinerID, 'INVALID') is the response.  
 		#responseFromMiners must execute evaluateBlock() on miners which yields the value
-		responses = network.responseFromMiners()
-		responses = dict(response)
+	###	responses = network.responseFromMiners()
+		responses = [(1, 540), (2, 540)]
+		responses = dict(responses)
 
 		if 'INVALID' in responses.values():
 			self.current_block = None
 			raise ValidityError("Block terminated due to invalidation from Miner")
 		
+		if 'Incorrect Signature' in responses.values():
+			raise ValidityError("Signature not matched. Check keys in path/.rsa/")	
+
 		temp_nonce = None
 		for value in responses.values():
-			if isinstace(value, int):
+			if isinstance(value, int):
 				temp_nonce = value
 				break
 		if all(value == temp_nonce for value in responses.values()):
 			block.save(temp_nonce)
-			network.TransmitToPeers(block)
+			self.signBlock(block)
+			self.chain.push(block)
+			self.createBlock()
+		###	network.TransmitToPeers(block)
 			#executes receiveBlock on all peers
 		else:
 			lagBlocks = []
+			addedTX = []
 			for key, value in responses.items():
 				if isinstace(value, list):
 					lagBlocks += value
-			lagBlocks = list(set(lagBlocks))
-			# lagHead = filter(lambda u: ,lagBlocks)
-			#push the blocks correctly and update current_block.header.prev_hash
-
+				if isinstance(value, tuple):
+					addedTX += list(value)
+			if addedTX: 
+				for tx in addedTX:
+					block.transactions.remove(tx)
+					raise MiningError('Excess transcations deleted. Retry again')
+			else:
+				lagBlocks = sorted(list(set(lagBlocks)), key=lambda u: u.header.height)
+				lagHead = lagBlocks[-1]
+				for blk in lagBlocks:
+					self.chain.push(blk)
+				block.header.prev_hash = lagHead.hash
+				block.header.height = lagHead.header.height + 1
+				for i, blk in enumerate(self.chain.blocks):
+					assert(i+1 == blk.header.height)
+					if i>0:
+						assert(blk.header.prev_hash == self.chain.blocks[i-1].hash)
+				raise MiningError('Forked branch merged. Retry again')
+				#push the blocks correctly and update current_block.header.prev_hash
 
 	def pushTransaction(self, transaction):
 		try:
 			self.current_block.addTransaction(transaction)
-			if len(self.current_block.transactions) >= MAX_TX_LIMIT:
+			if len(self.current_block.transactions) >= self.MAX_TX_LIMIT:
 				self.addBlock()
 		except:
 			self.createBlock()
@@ -167,7 +198,7 @@ class Node(object):
 		## or get network layer to do it
 		## for peer in peers:
 		## 	peer.receiveTransaction(transaction)
-		network.broadcastToPeers(transaction)
+	###	network.broadcastToPeers(transaction)
 		# **CORRECT-> broadcast the transaction block to all it peers in Network Layer**
 
 	#listening service for transaction
@@ -184,31 +215,67 @@ class Node(object):
 	#listening service for block 
 	def receiveBlock(self, block):
 		if self.ROLE == 'M':
-			if self.anayseBlock(block):
+			if self.analyseBlock(block):
 				self.addBlock(block)
 		elif block not in self.chain.blocks:
 			if self.current_block:
 				self.chain.push(block)
 				current_block.header.prev_hash = block.hash
 				current_block.header.height = block.height + 1
-			network.TransmitToPeers(block)
+		###	network.TransmitToPeers(block)
 			#executes receiveBlock on all peers
 
 	def __repr__(self):
 		return '<%s> %s' % (self.ROLE, self.id)
+
+	#summarization implementation
+	#invoked everytime maxdepth reached
+	def summarizeChain(self, base_level=0):
+		chain = self.chain
+		blocks = chain.blocks
+		max_depth = len(self.chain.base_pointers) - 1
+		current_gap = self.chain.end_pointers[base_level] - self.chain.base_pointers[base_level]
+		if current_gap > 2*chain.freelen-2:
+			start_block_index = self.chain.getIndexByHeight(chain.base_pointers[base_level])
+			summarizedBlock = SummaryBlock(blocks = blocks[start_block_index: start_block_index + chain.summary_width],\
+							 depth = base_level+1, prev_block = blocks[start_block_index-1])
+			self.chain.blocks[start_block_index: start_block_index + chain.summary_width] = [summarizedBlock]
+			try:
+				self.chain.end_pointers[base_level+1] = chain.base_pointers[base_level]
+			except Exception as e:
+				self.chain.end_pointers.append(chain.base_pointers[base_level])
+			self.chain.base_pointers[base_level]  += chain.summary_width
+			if max_depth < base_level + 1:
+				self.chain.base_pointers.append(summarizedBlock.height)
+
 
 
 #current version of code expects the miner to be live throughout. Thereby implying persistance among miners
 class Miner(Node):
 	ROLE = 'M'
 
+	def analyseBlock(self, block):
+		signerPublicKey = network.getNodePublicKey(block.node)
+		try:
+			signerPublicKey.verify(SHA256.new(block.hash.encode('utf-8')), block.signature)
+		except (ValueError, TypeError):
+			return False
+
+		if block.flags == 0x11:
+			if not reduce(lambda x, y: x and y, map(verifyTransaction, block.transactions)):
+				return False
+		return True
+
 	#listening service corresponding to getForkedBlocks
 	def evaluateBlock(self, block):
 		assert(isinstance(block, Block))
 		if not block.nonce:
+			addedTX = []
 			for transaction in block.transactions:
 				if transaction in self.chain.transactions:
-					return 'INVALID'
+					addedTX.append(transaction)
+			if addedTX:
+				return tuple(addedTX)
 
 			signerPublicKey = network.getNodePublicKey(block.node)
 			try:
@@ -238,7 +305,7 @@ class Miner(Node):
 	@classmethod
 	def generateNonce(block):
 		temp_block = block
-		for i in range(5*10**6):
+		for i in xrange(10**9):
 			temp_block.header.nonce = i
 			if sha256(str(temp_block).encode('utf-8')).hexdigest()[:block.threshold] == '0'*block.threshold:
 				return i
@@ -251,7 +318,7 @@ class Miner(Node):
 			
 	@classmethod
 	def verifyTransaction(transaction):
-		signerPublicKey = network.getNodePublicKey(wallet_address = transaction.error)
+		signerPublicKey = network.getNodePublicKey(wallet_address = transaction.sender)
 		#returns publickey of node associated with the wallet address
 		try:
 			signerPublicKey.verify(SHA256.new(str(transaction).encode('utf-8')), transaction.signature)
