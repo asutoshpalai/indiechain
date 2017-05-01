@@ -244,7 +244,7 @@ class Node(object):
 
 	#summarization implementation
 	#invoked everytime maxdepth reached
-	def summarizeChain(self, base_level=0):
+	def summarizeLevel(self, base_level=0):
 		chain = self.chain
 		blocks = chain.blocks
 		max_depth = len(self.chain.base_pointers) - 1
@@ -261,8 +261,17 @@ class Node(object):
 			self.chain.base_pointers[base_level]  += chain.summary_width
 			if max_depth < base_level + 1:
 				self.chain.base_pointers.append(summarizedBlock.height)
-
-
+			return True
+		else:
+			return None
+	
+	def summarizeChain(self):
+		for i in range(4):
+			try:
+				while(self.summarizeLevel(i)):
+					continue
+			except Exception as e:
+				break
 
 #current version of code expects the miner to be live throughout. Thereby implying persistance among miners
 class Miner(Node):

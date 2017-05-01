@@ -125,13 +125,16 @@ class SummaryBlock(object):
 
 	def __init__(self, blocks, depth, prev_block):
 		self.header = BlockHeader(prev_block, 4, self)
+		self.height = blocks[0].header.height
 		self.depth = depth
 		self.changes = {}
 		self.createSummary(blocks)
-		self.blocks = [block.header.height for block in blocks]
+		if all(isinstance(block, Block) for block in blocks):
+			self.blocks = [block.header.height for block in blocks]
+		elif all(isinstance(block, SummaryBlock) for block in blocks):
+			self.blocks = [block.height for block in blocks]
 		self.hash = blocks[-1].hash
-		self.height = self.blocks[0]
-
+		
 	def createSummary(self, blocks):
 		if all(isinstance(block, Block) for block in blocks):
 			utxos = []
@@ -149,7 +152,7 @@ class SummaryBlock(object):
 			for receiver in receivers:
 				self.changes[receiver] += sum(map(lambda v: v[1], filter(lambda u: u[0] == receiver, incoming)))
 		elif all(isinstance(block, SummaryBlock) for block in blocks):
-			all_keys = reduce(operator.add,[block.changes.keys() for block in blocks])
+			all_keys = reduce(operator.add,[list(block.changes.keys()) for block in blocks])
 			for key in all_keys:
 				self.changes[key] = 0
 			for block in blocks:
@@ -159,7 +162,7 @@ class SummaryBlock(object):
 			raise TypeError('Invalid typing of blocks')
 
 	def __repr__(self):
-		return 'Summary: [' + '|'.join(map(str, self.blocks)) +']'
+		return 'Summary['+ str(self.depth) +'] [' + '|'.join(map(str, self.blocks)) +']'
 
 class indieChain(object):
 	__slots__ = ['transactions', 'blocks', 'freelen', 'base_pointers', 'end_pointers', 'summary_width']
