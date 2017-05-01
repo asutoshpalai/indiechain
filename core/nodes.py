@@ -17,7 +17,7 @@ class Wallet(object):
 		self.node = node
 		self.publicKey = node.getNodePublicKey()
 		self.sender_endpoint = []
-		self.address = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
+		self.address = node.id
 		coinbaseTransaction = UTXO(self.address, self.address, initial_amount)
 		self.receiver_endpoint = [{'data': coinbaseTransaction, 'used': 0}]
 		self.transactions = []
@@ -96,7 +96,6 @@ class Node(object):
 
 	def __init__(self, chain):
 		# self.id = network.getNetworkId()
-		self.id = ''.join(random.choice(string.digits) for _ in range(3))
 		assert(isinstance(chain, indieChain))
 		self.chain = chain
 		self.pool = []
@@ -105,6 +104,7 @@ class Node(object):
 
 	def setNetwork(self, network):
 		self.network = network
+		self.id = hex(network.id)[2:]
 
 	def getNodePublicKey(self):
 		return self._key.publickey()
@@ -121,8 +121,8 @@ class Node(object):
 			    write_key.write(key.publickey().exportKey())
 		return key
 
-	def signBlock(self, block):	
-		try:	
+	def signBlock(self, block):
+		try:
 			block.signature =  pkcs1_15.new(self._key).sign(SHA256.new(block.hash.encode('utf-8')))
 		except:
 			block.hash = sha256(str(self).encode('utf-8')).hexdigest()
@@ -136,7 +136,7 @@ class Node(object):
 				self.current_block.addTransaction(transaction)
 			self.pool = []
 
-	def addBlock(self):
+	def addBlock(self, *args):
 		block = self.current_block
 		self.signBlock(block)
 		#transmit block to peers
@@ -152,9 +152,9 @@ class Node(object):
 		if 'INVALID' in responses.values():
 			self.current_block = None
 			raise ValidityError("Block terminated due to invalidation from Miner")
-		
+
 		if 'Incorrect Signature' in responses.values():
-			raise ValidityError("Signature not matched. Check keys in path/.rsa/")	
+			raise ValidityError("Signature not matched. Check keys in path/.rsa/")
 
 		temp_nonce = None
 		for value in responses.values():
@@ -176,7 +176,7 @@ class Node(object):
 					lagBlocks += value
 				if isinstance(value, tuple):
 					addedTX += list(value)
-			if addedTX: 
+			if addedTX:
 				for tx in addedTX:
 					block.transactions.remove(tx)
 					raise MiningError('Excess transcations deleted. Retry again')
@@ -216,7 +216,7 @@ class Node(object):
 			if transaction not in self.chain.transactions:
 				self.current_block.addTransaction(transaction)
 			if len(self.current_block.transactions) > self.MAX_TX_LIMIT:
-				self.addBlock()
+				self.addBlock(self.current_block)
 				self.createBlock()
 		except AttributeError:
 			self.pool.append(transaction)
@@ -265,9 +265,9 @@ class Miner(Node):
 	ROLE = 'M'
 
 	def analyseBlock(self, block):
-		signerPublicKey = network.getNodePublicKey(block.node)
+		signerPublicKey = self.network.getNodePublicKey(block.node)
 		try:
-			signerPublicKey.verify(SHA256.new(block.hash.encode('utf-8')), block.signature)
+			pkcs1_15.new(signerPublicKey).verify(SHA256.new(block.hash.encode('utf-8')), block.signature)
 		except (ValueError, TypeError):
 			return False
 
@@ -280,7 +280,7 @@ class Miner(Node):
 	@coroutine
 	def evaluateBlock(self, block):
 		assert(isinstance(block, Block))
-		if not block.nonce:
+		if not block.header.nonce:
 			addedTX = []
 			for transaction in block.transactions:
 				if transaction in self.chain.transactions:
@@ -290,27 +290,27 @@ class Miner(Node):
 
 			signerPublicKey = self.network.getNodePublicKey(block.node)
 			try:
-				signerPublicKey.verify(SHA256.new(block.hash.encode('utf-8')), block.signature)
+				pkcs1_15.new(signerPublicKey).verify(SHA256.new(block.hash.encode('utf-8')), block.signature)
 			except (ValueError, TypeError):
 				return 'Incorrect Signature'
 
 			if block.flags == 0x11:
-				if not reduce(lambda x, y: x and y, map(verifyTransaction, block.transactions)):
+				if not reduce(lambda x, y: x and y, map(self.verifyTransaction, block.transactions)):
 					return 'INVALID'
 
-		local_parent = filter(lambda u: u.header.height == block.header.height - 1, self.chain.blocks)[0]
+		local_parent = next(filter(lambda u: u.header.height == block.header.height - 1, self.chain.blocks))
 		#Miner contains uptill the parent of the block. Hence no fork. simply add the block
-		if local_parent.height == len(self.chain.blocks):
+		if local_parent.header.height == len(self.chain.blocks):
 			#generateNonce calculates the nonce and returns the nonce value
 			return generateNonce(block)
 
-		elif local_parent.hash == block.header.prev_hash:
+		elif local_parent.hash == block.header.previous_hash:
 			fork_height = block.header.height - 1
 			excess_blocks = filter(lambda u: u.header.height > fork_height, self.chain.blocks)
 			#this generates the response to FORK condition
 			return excess_blocks
 		else:
-			prev_block = yield from self.network.getBlock(block.node, block.header.prev_hash)
+			prev_block = yield from self.network.getBlock(block.node, block.header.previous_hash)
 			return self.evaluateBlock(prev_block)
 
 	@classmethod
@@ -324,15 +324,14 @@ class Miner(Node):
 
 	def addBlock(self, block):
 		block.miner = self.id
-		chain.push(block)
+		self.chain.push(block)
 		return 'Successfully appended to the blockchain'
 
-	@classmethod
-	def verifyTransaction(transaction):
-		signerPublicKey = self.network.getNodePublicKey(wallet_address = transaction.error)
+	def verifyTransaction(self, transaction):
+		signerPublicKey = self.network.getNodePublicKey(transaction.sender)
 		#returns publickey of node associated with the wallet address
 		try:
-			signerPublicKey.verify(SHA256.new(str(transaction).encode('utf-8')), transaction.signature)
+			pkcs1_15.new(signerPublicKey).verify(SHA256.new(str(transaction).encode('utf-8')), transaction.signature)
 			return True
 		except (ValueError, TypeError):
 			return False

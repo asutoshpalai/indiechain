@@ -3,6 +3,7 @@ from socket import inet_ntoa, inet_aton
 from .consts import *
 import random
 import pickle
+from Crypto.PublicKey import RSA
 
 TYPE_MAP = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
 
@@ -51,7 +52,7 @@ def block_packet(block):
     return pack(">I", START_STRING) + pickle_serialize(BLK_HEADER_FMT, BLK_HEADER, block)
 
 def public_key_packet(key):
-    return pack(">I", START_STRING) + pickle_serialize(PKEY_HEADER_FMT, PKEY_HEADER, key)
+    return pack(">I", START_STRING) + data_serialize(PKEY_HEADER_FMT, PKEY_HEADER, key.exportKey())
 
 def block_request_packet(hash):
     return pack(">I", START_STRING) + data_serialize(BLKR_HEADER_FMT, BLKR_HEADER, bytes(hash, 'ascii'))
@@ -82,7 +83,7 @@ def deserialize_trx(data):
     return deserialize_pickle(data, TRX_HEADER, TRX_HEADER_LENGTH, TRX_HEADER_FMT)
 
 def deserialize_public_key(data):
-    return deserialize_pickle(data, PKEY_HEADER, PKEY_HEADER_LENGTH, PKEY_HEADER_FMT)
+    return RSA.importKey(deserialize_data(data, PKEY_HEADER, PKEY_HEADER_LENGTH, PKEY_HEADER_FMT))
 
 def deserialize_block_request(data):
     return deserialize_data(data, BLKR_HEADER, BLKR_HEADER_LENGTH, BLKR_HEADER_FMT).decode('ascii')

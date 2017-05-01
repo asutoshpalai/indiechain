@@ -135,9 +135,11 @@ class Manager():
         [peer.sendTransaction(trx) for id, peer in self.peers.items()]
 
     def getNodePublicKey(self, id):
-        return peers[id].getPublicKey()
+        id = int(id, 16)
+        return self.peers[id].getPublicKey()
 
     def getBlock(self, node_id, hash):
+        node_id = int(node_id, 16)
         peer = self.peers[node_id]
         return peer.fetchBlock(hash)
 

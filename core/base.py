@@ -165,7 +165,7 @@ class indieChain(object):
 	def __init__(self, freelen=5, width=5):
 		self.blocks = [GenesisBlock()]
 		self.transactions = []
-		#base_pointer[0] points to first height of normal blocks, base_pointer[1] points to depth1 summary blocks. 
+		#base_pointer[0] points to first height of normal blocks, base_pointer[1] points to depth1 summary blocks.
 		#base_pointer[2] points to first dept2 summary blocks
 		self.base_pointers = [1]
 		self.end_pointers =[1]
@@ -186,7 +186,7 @@ class indieChain(object):
 
 		if validateBlock(block):
 			block.header.height = 1 + self.getHead().header.height
-			self.end_pointers[0] += 1 
+			self.end_pointers[0] += 1
 			self.blocks.append(block)
 			self.transactions += block.transactions
 
