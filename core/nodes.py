@@ -4,7 +4,7 @@ from .base import *
 
 from asyncio import coroutine
 from functools import reduce
-import random, string
+import random, string, copy
 from Crypto.PublicKey import RSA
 from Crypto.Hash import SHA256
 from Crypto.Signature import pkcs1_15
@@ -18,6 +18,7 @@ class Wallet(object):
 		self.publicKey = node.getNodePublicKey()
 		self.sender_endpoint = []
 		self.address = node.id
+		node.wallet = self
 		coinbaseTransaction = UTXO(self.address, self.address, initial_amount)
 		self.receiver_endpoint = [{'data': coinbaseTransaction, 'used': 0}]
 		self.transactions = []
@@ -68,8 +69,6 @@ class Wallet(object):
 				self.sender_endpoint = sender_endpoint_copy
 				del transaction
 				raise TransactionError("Cannot make the required transaction, due to insufficient balance.")
-		#network.receiveUTXO(receiver_address, utxo)
-		#should execute receiveUTXO on receiver
 		for utxo in utxos:
 			self.sender_endpoint.append({'data': utxo, 'amount': utxo.value})
 		self.signTransaction(transaction)
@@ -91,7 +90,7 @@ class Wallet(object):
 
 class Node(object):
 	MAX_TX_LIMIT = 3
-	__slots__ = ['id', 'chain', 'pool', '_key', 'current_block', 'network']
+	__slots__ = ['id', 'chain', 'pool', '_key', 'current_block', 'network', 'wallet']
 	ROLE = 'N'
 
 	def __init__(self, chain):
@@ -101,6 +100,7 @@ class Node(object):
 		self.pool = []
 		self._key = self.getNodeKey()
 		self.createBlock()
+		self.wallet = None
 
 	def setNetwork(self, network):
 		self.network = network
@@ -138,7 +138,7 @@ class Node(object):
 
 	def addBlock(self, *args):
 		block = self.current_block
-		self.signBlock(block)
+		block.hash = sha256(str(self).encode('utf-8')).hexdigest()
 		#transmit block to peers
 		responses = self.network.broadcastToMiners(block)
 		#list of response received from Miners. In case block is correct, response is (MinerID, Nonce). In case of Fork,
@@ -216,10 +216,13 @@ class Node(object):
 		try:
 			if transaction not in self.chain.transactions:
 				self.current_block.addTransaction(transaction)
+				for utxo in transaction.utxos:
+					if utxo.receiver == self.id and self.wallet:
+						self.wallet.receiveUTXO(utxo)
 			if len(self.current_block.transactions) > self.MAX_TX_LIMIT:
 				self.addBlock(self.current_block)
 				self.createBlock()
-		except AttributeError:
+		except AttributeError as e:
 			self.pool.append(transaction)
 
 	#listening service for block
@@ -289,12 +292,6 @@ class Miner(Node):
 			if addedTX:
 				return tuple(addedTX)
 
-			signerPublicKey = self.network.getNodePublicKey(block.node)
-			try:
-				pkcs1_15.new(signerPublicKey).verify(SHA256.new(block.hash.encode('utf-8')), block.signature)
-			except (ValueError, TypeError):
-				return 'Incorrect Signature'
-
 			if block.flags == 0x11:
 				if not reduce(lambda x, y: x and y, map(self.verifyTransaction, block.transactions)):
 					return 'INVALID'
@@ -316,9 +313,9 @@ class Miner(Node):
 			return ret
 
 	def generateNonce(self, block):
-		temp_block = block
+		temp_block = copy.deepcopy(block)
 		for i in range(10**9):
-			temp_block.header.nonce = i
+			temp_block.save(i)
 			if sha256(str(temp_block).encode('utf-8')).hexdigest()[:block.threshold] == '0'*block.threshold:
 				return i
 		raise MiningError("Unable to mine block within the constraints.")

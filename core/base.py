@@ -69,7 +69,7 @@ class BlockHeader(object):
 
 class Block(object):
 	__slots__ = ['header', 'transactions', 'flags', 'chain', 'threshold', 'hash', 'signature', 'miner', 'node']
-	hash_variables = ['header', 'transactions', 'chain', 'flags', 'signature']
+	hash_variables = ['header', 'transactions', 'flags']
 	depth = 0
 
 	def __init__(self, chain, threshold = 2):
@@ -88,6 +88,8 @@ class Block(object):
 	def save(self, nonce):
 		size = len(str(self))
 		self.header.save(nonce, size)
+		size = len(str(self))
+		self.header.save(nonce, size)
 		self.hash = sha256(str(self).encode('utf-8')).hexdigest()
 
 	def addTransaction(self, transaction):
@@ -102,7 +104,7 @@ class Block(object):
 			return "indieChain[%s]" % self.header.height
 
 	def __str__(self):
-		return '|'.join([str(getattr(self, attr)) for attr in self.hash_variables])
+		return '_*_'.join([str(getattr(self, attr)) for attr in self.hash_variables])
 
 
 class GenesisBlock(object):
