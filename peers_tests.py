@@ -10,8 +10,8 @@ from core.base import UTXO, Transaction
 import random
 
 # loggin.Logger.set
-logging.basicConfig(level=logging.DEBUG)
-#logging.basicConfig(level=logging.ERROR)
+# logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.ERROR)
 
 main_port = random.randint(4000, 9999)
 
@@ -43,7 +43,7 @@ def peer1(id, main_port):
     node = Node(ic)
     man.setNode(node)
     node.setNetwork(man)
-    wallet = Wallet(node, 10000)
+    wallet = Wallet(node, 1000000)
     wal2 = wallet
 
     try:
@@ -54,12 +54,13 @@ def peer1(id, main_port):
         sender = 'acsds'
         # man.broadcastTrx(t1)
         sender = 'qprs'
-        wallet.finalizeTransaction([wallet.makePayment('a', 100), wallet.makePayment('z', 50)])
-        wallet.finalizeTransaction([wallet.makePayment('b', 100), wallet.makePayment('c', 50)])
+        for _ in range(100):
+            wallet.finalizeTransaction([wallet.makePayment('a', 100), wallet.makePayment('z', 50)])
+            wallet.finalizeTransaction([wallet.makePayment('b', 100), wallet.makePayment('c', 50)])
         # man.broadcastTrx(t2)
         # sleep(1)
-        wallet.finalizeTransaction([wallet.makePayment('e', 100), wallet.makePayment('f', 50)])
-        wallet.finalizeTransaction([wallet.makePayment('t', 100), wallet.makePayment('y', 50)])
+        #wallet.finalizeTransaction([wallet.makePayment('e', 100), wallet.makePayment('f', 50)])
+        #wallet.finalizeTransaction([wallet.makePayment('t', 100), wallet.makePayment('y', 50)])
         # man.broadcastToMiners(b)
         print(peer._key.exportKey())
 
