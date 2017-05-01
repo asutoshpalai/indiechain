@@ -107,7 +107,6 @@ class MainWindow(tk.Frame):
         entryn.pack(side=TOP,padx=10,pady=10)
 
 
-        @coroutine
         def onTransact():
             recvaddr1 = entryr.get()
             self.recvaddr = recvaddr1.split(',')

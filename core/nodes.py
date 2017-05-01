@@ -285,6 +285,9 @@ class Miner(Node):
 		except (ValueError, TypeError):
 			return False
 
+		if block.hash[:block.threshold] != '0'*block.threshold:
+			return False
+		
 		if block.flags == 0x11:
 			if not reduce(lambda x, y: x and y, map(self.verifyTransaction, block.transactions)):
 				return False
@@ -343,3 +346,9 @@ class Miner(Node):
 			return True
 		except (ValueError, TypeError):
 			return False
+
+	def summarizeLevel(self, base_level=0):
+		raise AttributeError("Miner has no attribute 'summarizeLevel'")
+
+	def summarizeChain(self):
+		raise AttributeError("Miner has no attribute 'summarizeChain'")
