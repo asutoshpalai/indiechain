@@ -26,7 +26,7 @@ class Transaction(object):
 		self.inputs = []
 		for utxo in utxos:
 			assert(isinstance(utxo, UTXO))
-		self.utxos = utxos 
+		self.utxos = utxos
 		if self.utxos != []:
 			self.sender = utxos[0].sender
 			try:
@@ -42,7 +42,7 @@ class Transaction(object):
 
 class BlockHeader(object):
 	__slots__ = ['previous_hash', 'timestamp', 'nonce', 'threshold', 'size', 'block', 'height']
-	
+
 	def __init__(self, prev_block, threshold, block):
 		try:
 			self.height = prev_block.header.height + 1
@@ -55,11 +55,11 @@ class BlockHeader(object):
 		self.block = block
 		self.nonce = None
 		self.size = 0
-	
+
 	def save(self, nonce, size):
 		self.nonce = nonce
 		self.size = size
-	
+
 	def __repr__(self):
 		return "<%s> Header of Block %s" %(self.timestamp, self.block.header.height)
 
@@ -130,12 +130,18 @@ class indieChain(object):
 			return (head.hash == block.header.previous_hash)
 
 		if validateBlock(block):
-			block.header.height = 1 + self.getHead().header.height 
+			block.header.height = 1 + self.getHead().header.height
 			self.blocks.append(block)
 			self.transactions += block.transactions
 
 	def getGenesis(self):
 		return self.blocks[0]
+
+	def getHeaders(self):
+		return [block.header for block in self.blocks]
+
+	def getBlock(self, b_hash):
+		return next(block for block in self.blocks if block.hash == b_hash)
 
 	def __repr__(self):
 		return 'indieChain: ' + ' '.join([str(block.hash) for block in self.blocks][:10])

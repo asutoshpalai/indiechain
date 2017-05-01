@@ -107,11 +107,12 @@ class Manager():
         if self.node:
             self.node.receiveTransaction(trx)
 
+    @coroutine
     def receiveMinerBlock(self, block):
         self.log.info("recevied miner block: " + repr(block))
 
         if self.node:
-            self.node.evaluateBlock(block)
+            yield from self.node.evaluateBlock(block)
 
     def receiveBlock(self, block):
         self.log.info("recevied block: " + repr(block))
@@ -135,5 +136,12 @@ class Manager():
 
     def getNodePublicKey(self, id):
         return peers[id].getPublicKey()
+
+    def getBlock(self, node_id, hash):
+        peer = self.peers[node_id]
+        return peer.fetchBlock(hash)
+
+    def fetchNodeBlock(self, hash):
+        return self.node.chain.getBlock(hash)
 
 # ex: set tabstop=4 shiftwidth=4  expandtab:

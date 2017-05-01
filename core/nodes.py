@@ -4,6 +4,7 @@
 from .utils import *
 from .base import *
 
+from asyncio import coroutine
 from functools import reduce
 import random, string
 from Crypto.PublicKey import RSA
@@ -210,6 +211,7 @@ class Miner(Node):
 	ROLE = 'M'
 
 	#listening service corresponding to getForkedBlocks
+	@coroutine
 	def evaluateBlock(self, block):
 		assert(isinstance(block, Block))
 		if not block.nonce:
@@ -239,7 +241,7 @@ class Miner(Node):
 			#this generates the response to FORK condition
 			return excess_blocks
 		else:
-			prev_block = self.network.getBlock(block.node, block.header.prev_hash)
+			prev_block = yield from self.network.getBlock(block.node, block.header.prev_hash)
 			return self.evaluateBlock(prev_block)
 
 	@classmethod
