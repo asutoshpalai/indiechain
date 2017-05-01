@@ -54,7 +54,7 @@ def peer1(id, main_port):
         sender = 'acsds'
         # man.broadcastTrx(t1)
         sender = 'qprs'
-        for _ in range(200):
+        for _ in range(100):
             wallet.finalizeTransaction([wallet.makePayment('a', 100), wallet.makePayment('z', 50)])
             wallet.finalizeTransaction([wallet.makePayment('b', 100), wallet.makePayment('c', 50)])
         # man.broadcastTrx(t2)

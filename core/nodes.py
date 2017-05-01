@@ -251,6 +251,7 @@ class Node(object):
 		current_gap = self.chain.end_pointers[base_level] - self.chain.base_pointers[base_level]
 		if current_gap > 2*chain.freelen-2:
 			start_block_index = self.chain.getIndexByHeight(chain.base_pointers[base_level])
+			print('Summarizing Blocks['+str(chain.base_pointers[base_level])+', '+str(chain.base_pointers[base_level]+chain.summary_width-1)+'] at depth '+str(base_level+1))
 			summarizedBlock = SummaryBlock(blocks = blocks[start_block_index: start_block_index + chain.summary_width],\
 							 depth = base_level+1, prev_block = blocks[start_block_index-1])
 			self.chain.blocks[start_block_index: start_block_index + chain.summary_width] = [summarizedBlock]
