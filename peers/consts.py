@@ -6,10 +6,11 @@ START_STRING = 0x0b110907
 PROTO_VERSION = 0x00000001
 
 MSG_HI = 0x00000000
-# start string #MSG type # Proto version # IP Addr #port #id
-MSG_HI_FMT = ">IIIIHQ"
+# start string #MSG type # Proto version # Role # IP Addr #port #id
+MSG_HI_FMT = ">IIIcIHQ"
 MSG_HI_LENGTH = calcsize(MSG_HI_FMT)
 
+# obj_type, data length
 MSG_HEADER_FMT = ">II"
 MSG_HEADER_LENGTH = calcsize(MSG_HEADER_FMT)
 
@@ -17,3 +18,28 @@ TRX_HEADER = 0x10000001
 # obj_type, pickle length
 TRX_HEADER_FMT = MSG_HEADER_FMT
 TRX_HEADER_LENGTH = calcsize(TRX_HEADER_FMT)
+
+BLK_HEADER = 0x10000002
+# obj_type, pickle length
+BLK_HEADER_FMT = MSG_HEADER_FMT
+BLK_HEADER_LENGTH = calcsize(BLK_HEADER_FMT)
+
+MBLK_HEADER = 0x10000003
+# obj_type, pickle length
+MBLK_HEADER_FMT = MSG_HEADER_FMT
+MBLK_HEADER_LENGTH = calcsize(MBLK_HEADER_FMT)
+
+PKEY_HEADER = 0x10000004
+# obj_type, pickle length
+PKEY_HEADER_FMT = MSG_HEADER_FMT
+PKEY_HEADER_LENGTH = calcsize(PKEY_HEADER_FMT)
+
+BLKR_HEADER = 0x10000005
+# obj_type, data length
+BLKR_HEADER_FMT = MSG_HEADER_FMT + ""
+BLKR_HEADER_LENGTH = calcsize(BLKR_HEADER_FMT)
+
+BLKN_HEADER = 0x10000006
+# obj_type, data length
+BLKN_HEADER_FMT = MSG_HEADER_FMT + ""
+BLKN_HEADER_LENGTH = calcsize(BLKN_HEADER_FMT)
