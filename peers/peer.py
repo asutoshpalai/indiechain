@@ -17,6 +17,7 @@ class Peer():
         self.log = logging.getLogger('Peer {} of {}'.format(self.id, manager.id))
 
         self._blk_wait = {}
+        self._blk_res = None
 
     @asyncio.coroutine
     def receive_conn(self, sock):
@@ -51,9 +52,10 @@ class Peer():
             head = yield from loop.sock_recv(self.socket, MSG_HEADER_LENGTH)
             typ, size = unpack(MSG_HEADER_FMT, head)
             body = yield from loop.sock_recv(self.socket, size)
+            self._add_sock_cb()
             yield from self.data_received(typ, head + body)
         finally:
-            self._add_sock_cb()
+            pass
 
     @asyncio.coroutine
     def send_raw_data_aysnc(self, data):
@@ -76,6 +78,8 @@ class Peer():
             self.blockRequest(data)
         elif typ == BLKN_HEADER:
             self.receiveNewBlock(data)
+        elif typ == MRES_HEADER:
+            self.receiveMinerResult(data)
         else:
             self.log.error("Unknown data type: " + hex(typ))
 
@@ -102,12 +106,23 @@ class Peer():
         trx = trx_packet(transaction)
         self.send_data(trx)
 
+    def receiveMinerResult(self, data):
+        res = deserialize_miner_res(data)
+        self.log.info("received miner info: " + str(res))
+        event = self._blk_res
+        self._blk_res = res
+        event.set()
+
+    @asyncio.coroutine
     def sendMinerBlock(self, block):
         """
         called by manager on the same system to send the block to the miners
         """
         blk = miner_block_packet(block)
         self.send_data(blk)
+        self._blk_res = asyncio.Event()
+        yield from self._blk_res.wait()
+        return (self.id, self._blk_res)
 
     def sendBlock(self, block):
         """
@@ -125,7 +140,9 @@ class Peer():
 
     def handleMinerBlock(self, data):
         block = deserialize_miner_block(data)
-        yield from self.manager.receiveMinerBlock(block)
+        res = yield from self.manager.receiveMinerBlock(block)
+        res_pkt = miner_res_packet(res)
+        self.send_data(res_pkt)
 
     def handleBlock(self, data):
         block = deserialize_block(data)
@@ -159,6 +176,7 @@ class Peer():
 
     @asyncio.coroutine
     def fetchBlock(self, hash):
+        self.log.debug("Requesting block: " + hash)
         if hash in self._blk_wait:
             obj = self._blk_wait[hash]
 
@@ -175,6 +193,8 @@ class Peer():
 
         yield from event.wait()
 
-        return self._blk_wait[hash]
+        blk = self._blk_wait[hash]
+        self.log.debug("received block: " + repr(blk))
+        return blk
 
 # ex: set tabstop=4 shiftwidth=4  expandtab:

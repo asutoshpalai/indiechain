@@ -2,7 +2,7 @@ from .peer import Peer
 from struct import unpack
 import socket
 import logging
-from asyncio import new_event_loop, coroutine
+from asyncio import new_event_loop, coroutine, gather
 import asyncio
 from threading import Thread
 from .helpers import *
@@ -112,7 +112,8 @@ class Manager():
         self.log.info("recevied miner block: " + repr(block))
 
         if self.node:
-            yield from self.node.evaluateBlock(block)
+            x = yield from self.node.evaluateBlock(block)
+            return x
 
     def receiveBlock(self, block):
         self.log.info("recevied block: " + repr(block))
@@ -121,9 +122,19 @@ class Manager():
             self.node.receiveBlock(block)
 
     def broadcastToMiners(self, block):
-        print("*" * 40)
         self.log.info("broadcasting block to miners: " + repr(block))
-        [peer.sendMinerBlock(block) for id, peer in self.peers.items() if peer.role == 'M']
+        coros = [peer.sendMinerBlock(block) for id, peer in self.peers.items() if peer.role == 'M']
+        f = gather(*coros, loop=self.loop)
+
+        loop = self.loop
+        if loop.is_running():
+            future = asyncio.run_coroutine_threadsafe(f, loop)
+            res =  future.result(30)
+        else:
+            res = loop.run_until_complete(f)
+
+        return res
+
 
     # send block to peers
     def transmitToPeers(self, block):

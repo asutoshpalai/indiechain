@@ -60,6 +60,9 @@ def block_request_packet(hash):
 def new_block_packet(block):
     return pack(">I", START_STRING) + pickle_serialize(BLKN_HEADER_FMT, BLKN_HEADER, block)
 
+def miner_res_packet(res):
+    return pack(">I", START_STRING) + pickle_serialize(MRES_HEADER_FMT, MRES_HEADER, res)
+
 def deserialize_data(data, obj_type, header_len, header_fmt):
     header = data[:header_len]
     body = data[header_len:]
@@ -90,5 +93,9 @@ def deserialize_block_request(data):
 
 def deserialize_new_block(data):
     return deserialize_pickle(data, BLKN_HEADER, BLKN_HEADER_LENGTH, BLKN_HEADER_FMT)
+
+def deserialize_miner_res(data):
+    return deserialize_pickle(data, MRES_HEADER, MRES_HEADER_LENGTH, MRES_HEADER_FMT)
+
 
 # ex: set tabstop=4 shiftwidth=4  expandtab:

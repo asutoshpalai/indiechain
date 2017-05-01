@@ -65,14 +65,14 @@ class BlockHeader(object):
 		return "<%s> Header of Block %s" %(self.timestamp, self.block.header.height)
 
 	def __str__(self):
-		return '|'.join([str(getattr(self, attr)) for attr in self.__slots__ if attr not in ['block', 'nonce']])
+		return '|'.join([str(getattr(self, attr)) for attr in self.__slots__ if attr not in ['block']])
 
 class Block(object):
 	__slots__ = ['header', 'transactions', 'flags', 'chain', 'threshold', 'hash', 'signature', 'miner', 'node']
 	hash_variables = ['header', 'transactions', 'chain', 'flags', 'signature']
 	depth = 0
 
-	def __init__(self, chain, threshold = 4):
+	def __init__(self, chain, threshold = 2):
 		prev_block = chain.getHead()
 		if prev_block:
 			self.header = BlockHeader(prev_block,threshold, self)
@@ -83,6 +83,7 @@ class Block(object):
 		self.chain = chain
 		self.signature = None
 		self.threshold = threshold
+		self.hash = None
 
 	def save(self, nonce):
 		size = len(str(self))
@@ -107,8 +108,7 @@ class Block(object):
 class GenesisBlock(object):
 	def __init__(self):
 		self.header = BlockHeader(None, 0, self)
-		self.timestamp = time()
-		self.hash = '0000' + sha256(str(self.timestamp).encode('utf-8')).hexdigest()[4:]
+		self.hash = '0' * 64
 		self.size = len(self.hash)
 		self.depth = 0
 

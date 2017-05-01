@@ -122,9 +122,9 @@ class Node(object):
 		return key
 
 	def signBlock(self, block):
-		try:
+		if block.hash:
 			block.signature =  pkcs1_15.new(self._key).sign(SHA256.new(block.hash.encode('utf-8')))
-		except:
+		else:
 			block.hash = sha256(str(self).encode('utf-8')).hexdigest()
 			block.signature =  pkcs1_15.new(self._key).sign(SHA256.new(block.hash.encode('utf-8')))
 		block.node = self.id
@@ -140,12 +140,12 @@ class Node(object):
 		block = self.current_block
 		self.signBlock(block)
 		#transmit block to peers
-		self.network.broadcastToMiners(block)
+		responses = self.network.broadcastToMiners(block)
 		#list of response received from Miners. In case block is correct, response is (MinerID, Nonce). In case of Fork,
 		#(MinerID, [<blocks>]]) is received & if invalid, (MinerID, 'INVALID') is the response.
 		#responseFromMiners must execute evaluateBlock() on miners which yields the value
-		responses = self.network.responseFromMiners()
-		responses = dict(response)
+		# responses = self.network.responseFromMiners()
+		responses = dict(responses)
 	#	responses = [(1, 540), (2, 540)]
 	#	responses = dict(responses)
 
@@ -166,7 +166,7 @@ class Node(object):
 			self.signBlock(block)
 			self.chain.push(block)
 			self.createBlock()
-			self.network.TransmitToPeers(block)
+			self.network.transmitToPeers(block)
 			#executes receiveBlock on all peers
 		else:
 			lagBlocks = []
@@ -201,6 +201,7 @@ class Node(object):
 			if len(self.current_block.transactions) >= self.MAX_TX_LIMIT:
 				self.addBlock()
 		except Exception as e:
+			print(e)
 			self.createBlock()
 			self.current_block.addTransaction(transaction)
 		## peers = network.getPeers()
@@ -232,7 +233,7 @@ class Node(object):
 				current_block.header.prev_hash = block.hash
 				current_block.header.height = block.height + 1
 
-			self.network.TransmitToPeers(block)
+			self.network.transmitToPeers(block)
 			#executes receiveBlock on all peers
 
 	def __repr__(self):
@@ -272,7 +273,7 @@ class Miner(Node):
 			return False
 
 		if block.flags == 0x11:
-			if not reduce(lambda x, y: x and y, map(verifyTransaction, block.transactions)):
+			if not reduce(lambda x, y: x and y, map(self.verifyTransaction, block.transactions)):
 				return False
 		return True
 
@@ -300,23 +301,23 @@ class Miner(Node):
 
 		local_parent = next(filter(lambda u: u.header.height == block.header.height - 1, self.chain.blocks))
 		#Miner contains uptill the parent of the block. Hence no fork. simply add the block
-		if local_parent.header.height == len(self.chain.blocks):
+		if local_parent.header.height == len(self.chain.blocks) - 1:
 			#generateNonce calculates the nonce and returns the nonce value
-			return generateNonce(block)
+			return self.generateNonce(block)
 
 		elif local_parent.hash == block.header.previous_hash:
 			fork_height = block.header.height - 1
 			excess_blocks = filter(lambda u: u.header.height > fork_height, self.chain.blocks)
 			#this generates the response to FORK condition
-			return excess_blocks
+			return list(excess_blocks)
 		else:
 			prev_block = yield from self.network.getBlock(block.node, block.header.previous_hash)
-			return self.evaluateBlock(prev_block)
+			ret = yield from self.evaluateBlock(prev_block)
+			return ret
 
-	@classmethod
-	def generateNonce(block):
+	def generateNonce(self, block):
 		temp_block = block
-		for i in xrange(10**9):
+		for i in range(10**9):
 			temp_block.header.nonce = i
 			if sha256(str(temp_block).encode('utf-8')).hexdigest()[:block.threshold] == '0'*block.threshold:
 				return i
